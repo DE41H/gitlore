@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db import transaction
 from pgvector.django import VectorField
 
 # Create your models here.
@@ -29,8 +30,8 @@ class World(models.Model):
 
 
 class SeriesVisibility(models.TextChoices):
-    PUBLIC = 'public', 'Public'  # pyright: ignore[reportAssignmentType]
-    PRIVATE = 'private', 'Private'  # pyright: ignore[reportAssignmentType]
+    PUBLIC = 'public', 'Public'
+    PRIVATE = 'private', 'Private'
 
 
 class Series(models.Model):
@@ -39,7 +40,23 @@ class Series(models.Model):
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked', blank=True)
+    like_count = models.IntegerField(default=0)
     visibility = models.CharField(max_length=20, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC)
+
+    @transaction.atomic()
+    def like(self, user):
+        if not self.likes.filter(id=user.id).exists():
+            self.likes.add(user)
+            self.objects.filter(pk=self.pk).update(like_count = models.F('like_count') + 1)
+
+    @transaction.atomic()
+    def unlike(self, user):
+        if self.likes.filter(id=user.id).exists():
+            self.likes.remove(user)
+            Series.objects.filter(pk=self.pk).update(like_count = models.F('like_count') - 1)
+
+    class Meta:
+        unique_together = ('name', 'author')
 
 
 class Chapter(models.Model):
