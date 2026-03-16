@@ -5,19 +5,20 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
+ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN uv sync --frozen --no-dev --no-install-project
 
 
 FROM python:3.14-slim AS runtime
 
+COPY --from=builder /venv /venv
+
+ENV PATH="/venv/bin:$PATH"
+
 WORKDIR /app
-
-COPY --from=builder /app/.venv /app/.venv
-
-ENV PATH="/app/.venv/bin:$PATH"
 
 COPY . .
 
 RUN DJANGO_SECRET_KEY=build-phase python manage.py collectstatic --noinput
 
-CMD ["gCMD ["uv", "run", "gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "6", "--worker-class", "uvicorn.workers.UvicornWorker"]"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "6", "--worker-class", "uvicorn.workers.UvicornWorker"]

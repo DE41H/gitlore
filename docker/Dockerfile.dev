@@ -5,8 +5,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
+ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN uv sync --frozen --no-install-project
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/venv/bin:$PATH"
 
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
