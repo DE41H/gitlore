@@ -13,6 +13,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   web:
     build:
       context: ..
@@ -25,6 +35,23 @@ services:
       - ../secrets/.env.dev
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    command: celery -A config worker -l info --concurrency 6
+    volumes:
+      - ..:/app
+    env_file:
+      - ../secrets/.env.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:
