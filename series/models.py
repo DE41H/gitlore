@@ -82,7 +82,7 @@ class Series(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked', blank=True)
     like_count = models.PositiveIntegerField(default=0)
-    visibility = models.CharField(max_length=20, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC)
+    visibility = models.CharField(max_length=7, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC)
     spin_off = models.ForeignKey('self', on_delete=models.SET_NULL, related_name='spin_offs', null=True, blank=True)
 
     @transaction.atomic
@@ -92,6 +92,7 @@ class Series(models.Model):
             series.likes.add(user)
             series.like_count = models.F('like_count') + 1
             series.save(update_fields=['like_count'])
+            self.refresh_from_db(fields=['like_count'])
 
     @transaction.atomic
     def unlike(self, user):
@@ -100,6 +101,7 @@ class Series(models.Model):
             series.likes.remove(user)
             series.like_count = models.F('like_count') - 1
             series.save(update_fields=['like_count'])
+            self.refresh_from_db(fields=['like_count'])
 
     def __str__(self) -> str:
         return f"[Series: {self.name}]"
@@ -121,7 +123,7 @@ class Chapter(models.Model):
     name = models.CharField(max_length=255)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='chapters')
     root = models.ForeignKey('series.Series', on_delete=models.CASCADE, related_name='nodes')
-    parent = models.ForeignKey('self', on_delete=models.SET_NULL, related_name='children', null=True, blank=True)
+    parent = models.ForeignKey('self', on_delete=models.PROTECT, related_name='children', null=True, blank=True)
     prompt = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
