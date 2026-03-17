@@ -42,6 +42,7 @@ class Series(models.Model):
     likes = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='liked', blank=True)
     like_count = models.IntegerField(default=0)
     visibility = models.CharField(max_length=20, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC)
+    spin_off = models.ForeignKey('self', on_delete=models.SET_NULL, related_name='spin_offs', null=True, blank=True)
 
     @transaction.atomic()
     def like(self, user):
@@ -65,4 +66,5 @@ class Chapter(models.Model):
     parent = models.ForeignKey('self', on_delete=models.SET_NULL, related_name='children', null=True, blank=True)
     prompt = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    stem = models.BooleanField(default=False)
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
