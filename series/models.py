@@ -1,3 +1,4 @@
+import copy
 import uuid
 
 from django.conf import settings
@@ -15,7 +16,7 @@ EMBEDDING_DIMENSIONS = 1536
 
 class Genre(models.Model):
     name = models.CharField(max_length=255, unique=True)
-    slug = models.SlugField(max_length=270, unique=True)
+    slug = models.SlugField(max_length=270, unique=True, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
     series = models.ManyToManyField("series.Series", related_name="genres")
 
@@ -86,7 +87,7 @@ class SeriesVisibility(models.TextChoices):
 
 class Series(models.Model):
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=270)
+    slug = models.SlugField(max_length=270, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
     synopsis = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -189,9 +190,9 @@ class Series(models.Model):
 
 class Chapter(models.Model):
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=270)
+    slug = models.SlugField(max_length=270, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
-    prompt = models.TextField()
+    prompt = models.TextField(validators=[MaxLengthValidator(10000)])
     content = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -205,34 +206,75 @@ class Chapter(models.Model):
     )
 
     @transaction.atomic
-    def create_spin_off(self, user):
+    def start_spin_off(self, user):
         series = Series.create_copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
-        chapters = {
-            ch.pk: ch
-            for ch in Chapter.objects.filter(series_id=self.series_id)  # pyright: ignore[reportAttributeAccessIssue]
+        lineage = self.get_lineage()
+        for chapter_obj in lineage:
+            chapter_obj.pk = None
+            chapter_obj.slug = f"{slugify(chapter_obj.name)}-{chapter_obj.uid.hex[:12]}"
+            chapter_obj.series = series
+            chapter_obj.canon = True
+        created = Chapter.objects.bulk_create(lineage)
+        for i in range(1, len(created)):
+            created[i].parent = created[i - 1]
+        Chapter.objects.bulk_update(created[1:], ["parent"])
+        return series
+
+    @transaction.atomic
+    def toggle_canon(self):
+        chapter = (
+            Chapter.objects.select_for_update().select_related("parent").get(pk=self.pk)
+        )
+        if chapter.canon:
+            if chapter.children.filter(canon=True).exists():  # pyright: ignore[reportAttributeAccessIssue]
+                raise ValueError(
+                    "Cannot unset canon if there are canon children. Unset canon on children first."
+                )
+            Chapter.objects.filter(pk=self.pk).update(canon=False)
+        else:
+            if chapter.parent and not chapter.parent.canon:
+                raise ValueError(
+                    "Parent chapter must be canon to set this chapter as canon."
+                )
+            Chapter.objects.filter(pk=self.pk).update(canon=True)
+        self.refresh_from_db(fields=["canon"])
+
+    @transaction.atomic
+    def change_parent(self, new_parent_id):
+        chapter = (
+            Chapter.objects.select_for_update().select_related("parent").get(pk=self.pk)
+        )
+        if not Chapter.objects.filter(
+            pk=new_parent_id,
+            series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+        ).exists():
+            raise ValueError("New parent must belong to the same series.")
+        if chapter.canon:
+            raise ValueError("Cannot change the parent of a canon chapter.")
+        if self in Chapter.objects.get(id=new_parent_id).get_lineage():
+            raise ValueError("Cannot set a descendant as the new parent.")
+        Chapter.objects.filter(pk=self.pk).update(parent_id=new_parent_id)
+        self.refresh_from_db(fields=["parent"])
+
+    @transaction.atomic
+    def remove(self):
+        chapter = Chapter.objects.select_for_update().get(pk=self.pk)
+        if chapter.canon:
+            raise ValueError("Cannot delete a canon chapter. Unset canon first.")
+        Chapter.objects.filter(parent_id=chapter.pk).update(parent_id=chapter.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
+        chapter.delete()
+
+    def get_lineage(self):
+        chapter_map = {
+            c.pk: copy.copy(c)
+            for c in Chapter.objects.filter(series_id=self.series_id)  # pyright: ignore[reportAttributeAccessIssue]
         }
         lineage = []
-        current = self
+        current = chapter_map[self.pk]
         while current:
-            lineage.append(
-                Chapter(
-                    name=current.name,
-                    prompt=current.prompt,
-                    content=current.content,
-                    series=series,
-                    canon=True,
-                    embedding=current.embedding,
-                )
-            )
-            current = chapters.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
-        lineage.reverse()
-        created = Chapter.objects.bulk_create(lineage)
-        for i in range(len(created)):
-            if i > 0:
-                created[i].parent = created[i - 1]
-            created[i].slug = f"{slugify(created[i].name)}-{created[i].uid.hex[:12]}"
-        Chapter.objects.bulk_update(created, ["parent", "slug"])
-        return series
+            lineage.append(current)
+            current = chapter_map.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
+        return lineage[::-1]
 
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
