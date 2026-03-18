@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.validators import MaxLengthValidator
 from django.db import models, transaction
 from django.utils.text import slugify
 from pgvector.django import HnswIndex, VectorField
@@ -25,19 +26,19 @@ class Genre(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"[Genre: {self.name}]"
+        return f"[Genre: {self.pk}]"
 
 
 class Character(models.Model):
     name = models.CharField(max_length=255)
-    description = models.TextField(max_length=2000)
+    description = models.TextField(validators=[MaxLengthValidator(2000)])
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
     series = models.ForeignKey(
         "series.Series", on_delete=models.CASCADE, related_name="characters"
     )
 
     def __str__(self) -> str:
-        return f"[Character: {self.name}, Series: {self.series.name}]"
+        return f"[Character: {self.pk}, Series: {self.series_id}]"  # pyright: ignore[reportAttributeAccessIssue]
 
     class Meta:
         constraints = [
@@ -57,14 +58,14 @@ class Character(models.Model):
 
 
 class World(models.Model):
-    description = models.TextField(max_length=4000)
+    description = models.TextField(validators=[MaxLengthValidator(5000)])
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
     series = models.OneToOneField(
         "series.Series", on_delete=models.CASCADE, related_name="world"
     )
 
     def __str__(self) -> str:
-        return f"[World: {self.pk}, Series: {self.series.name}]"
+        return f"[World: {self.pk}, Series: {self.series_id}]"  # pyright: ignore[reportAttributeAccessIssue]
 
     class Meta:
         indexes = [
@@ -87,7 +88,7 @@ class Series(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=270)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
-    synopsis = models.TextField()
+    synopsis = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     visibility = models.CharField(
@@ -122,7 +123,7 @@ class Series(models.Model):
             author=author,
             spin_off_id=source_pk if is_spin_off else None,
         )
-        series.genres.add(source.genres.all())  # pyright: ignore[reportAttributeAccessIssue]
+        series.genres.set(source.genres.all())  # pyright: ignore[reportAttributeAccessIssue]
         World.objects.create(
             description=source.world.description,  # pyright: ignore[reportAttributeAccessIssue]
             series=series,
@@ -143,14 +144,17 @@ class Series(models.Model):
 
     @transaction.atomic
     def toggle_like(self, user):
-        obj = Series.objects.select_for_update().get(pk=self.pk)
-        if obj.likes.filter(pk=user.pk).exists():
-            obj.likes.remove(user)
-            obj.like_count = models.F("like_count") - 1
+        series = Series.objects.select_for_update().get(pk=self.pk)
+        if series.likes.filter(pk=user.pk).exists():
+            series.likes.remove(user)
+            Series.objects.filter(pk=self.pk).update(
+                like_count=models.F("like_count") - 1
+            )
         else:
-            obj.likes.add(user)
-            obj.like_count = models.F("like_count") + 1
-        obj.save(update_fields=["like_count"])
+            series.likes.add(user)
+            Series.objects.filter(pk=self.pk).update(
+                like_count=models.F("like_count") + 1
+            )
         self.refresh_from_db(fields=["like_count"])
 
     def save(self, *args, **kwargs) -> None:
@@ -160,12 +164,16 @@ class Series(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"[Series: {self.name}]"
+        return f"[Series: {self.pk}]"
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["slug", "author"], name="unique_series_slug_per_author"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(like_count__gte=0),
+                name="like_count_non_negative",
             ),
         ]
         indexes = [
@@ -199,7 +207,10 @@ class Chapter(models.Model):
     @transaction.atomic
     def create_spin_off(self, user):
         series = Series.create_copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
-        chapters = {ch.pk: ch for ch in self.series.chapters.all()}
+        chapters = {
+            ch.pk: ch
+            for ch in Chapter.objects.filter(series_id=self.series_id)  # pyright: ignore[reportAttributeAccessIssue]
+        }
         lineage = []
         current = self
         while current:
@@ -226,11 +237,11 @@ class Chapter(models.Model):
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
             base_slug = slugify(self.name)
-            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
+            self.slug = f"{base_slug}-{self.uid.hex[:12]}"
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"[Chapter: {self.name}, Series: {self.series.name}]"
+        return f"[Chapter: {self.pk}, Series: {self.series_id}]"  # pyright: ignore[reportAttributeAccessIssue]
 
     class Meta:
         constraints = [
@@ -252,11 +263,6 @@ class Chapter(models.Model):
             models.Index(fields=["series", "canon"], name="chapter_series_canon_idx"),
             models.Index(
                 fields=["series", "-created_at"], name="chapter_series_created_idx"
-            ),
-            models.Index(
-                fields=["created_at"],
-                condition=models.Q(content__isnull=True),
-                name="chapter_pending_generation_idx",
             ),
             HnswIndex(
                 fields=["embedding"],
