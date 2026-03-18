@@ -6,66 +6,96 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('series', '0001_initial'),
+        ("series", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='series',
-            name='like_count_must_be_non_negative',
+            model_name="series",
+            name="like_count_must_be_non_negative",
         ),
         migrations.AddField(
-            model_name='chapter',
-            name='content',
+            model_name="chapter",
+            name="content",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.AlterField(
-            model_name='chapter',
-            name='parent',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='children', to='series.chapter'),
+            model_name="chapter",
+            name="parent",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="children",
+                to="series.chapter",
+            ),
         ),
         migrations.AlterField(
-            model_name='series',
-            name='visibility',
-            field=models.CharField(choices=[('public', 'Public'), ('private', 'Private')], default='public', max_length=7),
+            model_name="series",
+            name="visibility",
+            field=models.CharField(
+                choices=[("public", "Public"), ("private", "Private")],
+                default="public",
+                max_length=7,
+            ),
         ),
         migrations.AddIndex(
-            model_name='chapter',
-            index=models.Index(fields=['root', 'stem'], name='chapter_root_stem_idx'),
+            model_name="chapter",
+            index=models.Index(fields=["root", "stem"], name="chapter_root_stem_idx"),
         ),
         migrations.AddIndex(
-            model_name='chapter',
-            index=models.Index(fields=['root', '-created_at'], name='chapter_root_created_idx'),
+            model_name="chapter",
+            index=models.Index(
+                fields=["root", "-created_at"], name="chapter_root_created_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='chapter',
-            index=models.Index(fields=['author', '-created_at'], name='chapter_author_created_idx'),
+            model_name="chapter",
+            index=models.Index(
+                fields=["author", "-created_at"], name="chapter_author_created_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='chapter',
-            index=models.Index(condition=models.Q(('content__isnull', True)), fields=['created_at'], name='chapter_pending_generation_idx'),
+            model_name="chapter",
+            index=models.Index(
+                condition=models.Q(("content__isnull", True)),
+                fields=["created_at"],
+                name="chapter_pending_generation_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='series',
-            index=models.Index(fields=['visibility', '-created_at'], name='series_visibility_created_idx'),
+            model_name="series",
+            index=models.Index(
+                fields=["visibility", "-created_at"],
+                name="series_visibility_created_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='series',
-            index=models.Index(fields=['author', '-created_at'], name='series_author_created_idx'),
+            model_name="series",
+            index=models.Index(
+                fields=["author", "-created_at"], name="series_author_created_idx"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='chapter',
-            constraint=models.UniqueConstraint(condition=models.Q(('stem', True)), fields=('parent',), name='unique_stem_child_per_parent'),
+            model_name="chapter",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("stem", True)),
+                fields=("parent",),
+                name="unique_stem_child_per_parent",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='chapter',
-            constraint=models.UniqueConstraint(condition=models.Q(('parent__isnull', True), ('stem', True)), fields=('root',), name='unique_stem_root_per_series'),
+            model_name="chapter",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("parent__isnull", True), ("stem", True)),
+                fields=("root",),
+                name="unique_stem_root_per_series",
+            ),
         ),
         migrations.RemoveField(
-            model_name='series',
-            name='like_count',
+            model_name="series",
+            name="like_count",
         ),
     ]

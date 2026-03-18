@@ -8,7 +8,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -17,88 +16,232 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Series',
+            name="Series",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255)),
-                ('description', models.TextField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('like_count', models.PositiveIntegerField(default=0)),
-                ('visibility', models.CharField(choices=[('public', 'Public'), ('private', 'Private')], default='public', max_length=20)),
-                ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='series', to=settings.AUTH_USER_MODEL)),
-                ('likes', models.ManyToManyField(blank=True, related_name='liked', to=settings.AUTH_USER_MODEL)),
-                ('spin_off', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='spin_offs', to='series.series')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("description", models.TextField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("like_count", models.PositiveIntegerField(default=0)),
+                (
+                    "visibility",
+                    models.CharField(
+                        choices=[("public", "Public"), ("private", "Private")],
+                        default="public",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "author",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="series",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "likes",
+                    models.ManyToManyField(
+                        blank=True, related_name="liked", to=settings.AUTH_USER_MODEL
+                    ),
+                ),
+                (
+                    "spin_off",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="spin_offs",
+                        to="series.series",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Genre',
+            name="Genre",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255, unique=True)),
-                ('series', models.ManyToManyField(related_name='genres', to='series.series')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255, unique=True)),
+                (
+                    "series",
+                    models.ManyToManyField(related_name="genres", to="series.series"),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Character',
+            name="Character",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255)),
-                ('description', models.TextField()),
-                ('embedding', pgvector.django.vector.VectorField(dimensions=1536, null=True)),
-                ('series', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='characters', to='series.series')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("description", models.TextField()),
+                (
+                    "embedding",
+                    pgvector.django.vector.VectorField(dimensions=1536, null=True),
+                ),
+                (
+                    "series",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="characters",
+                        to="series.series",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Chapter',
+            name="Chapter",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=255)),
-                ('prompt', models.TextField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('stem', models.BooleanField(default=False)),
-                ('embedding', pgvector.django.vector.VectorField(dimensions=1536, null=True)),
-                ('author', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chapters', to=settings.AUTH_USER_MODEL)),
-                ('parent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='children', to='series.chapter')),
-                ('root', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='nodes', to='series.series')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("prompt", models.TextField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("stem", models.BooleanField(default=False)),
+                (
+                    "embedding",
+                    pgvector.django.vector.VectorField(dimensions=1536, null=True),
+                ),
+                (
+                    "author",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="chapters",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "parent",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="children",
+                        to="series.chapter",
+                    ),
+                ),
+                (
+                    "root",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="nodes",
+                        to="series.series",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='World',
+            name="World",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('description', models.TextField()),
-                ('embedding', pgvector.django.vector.VectorField(dimensions=1536, null=True)),
-                ('series', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='world', to='series.series')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("description", models.TextField()),
+                (
+                    "embedding",
+                    pgvector.django.vector.VectorField(dimensions=1536, null=True),
+                ),
+                (
+                    "series",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="world",
+                        to="series.series",
+                    ),
+                ),
             ],
         ),
         migrations.AddConstraint(
-            model_name='series',
-            constraint=models.UniqueConstraint(fields=('name', 'author'), name='unique_series_name_per_author'),
+            model_name="series",
+            constraint=models.UniqueConstraint(
+                fields=("name", "author"), name="unique_series_name_per_author"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='series',
-            constraint=models.CheckConstraint(condition=models.Q(('like_count__gte', 0)), name='like_count_must_be_non_negative'),
+            model_name="series",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("like_count__gte", 0)),
+                name="like_count_must_be_non_negative",
+            ),
         ),
         migrations.AddIndex(
-            model_name='character',
-            index=pgvector.django.indexes.HnswIndex(ef_construction=64, fields=['embedding'], m=16, name='character_embedding_hnsw_idx', opclasses=['vector_cosine_ops']),
+            model_name="character",
+            index=pgvector.django.indexes.HnswIndex(
+                ef_construction=64,
+                fields=["embedding"],
+                m=16,
+                name="character_embedding_hnsw_idx",
+                opclasses=["vector_cosine_ops"],
+            ),
         ),
         migrations.AddConstraint(
-            model_name='character',
-            constraint=models.UniqueConstraint(fields=('name', 'series'), name='unique_character_name_per_series'),
+            model_name="character",
+            constraint=models.UniqueConstraint(
+                fields=("name", "series"), name="unique_character_name_per_series"
+            ),
         ),
         migrations.AddIndex(
-            model_name='chapter',
-            index=pgvector.django.indexes.HnswIndex(ef_construction=64, fields=['embedding'], m=16, name='chapter_embedding_hnsw_idx', opclasses=['vector_cosine_ops']),
+            model_name="chapter",
+            index=pgvector.django.indexes.HnswIndex(
+                ef_construction=64,
+                fields=["embedding"],
+                m=16,
+                name="chapter_embedding_hnsw_idx",
+                opclasses=["vector_cosine_ops"],
+            ),
         ),
         migrations.AddConstraint(
-            model_name='chapter',
-            constraint=models.UniqueConstraint(fields=('name', 'root'), name='unique_chapter_name_per_series'),
+            model_name="chapter",
+            constraint=models.UniqueConstraint(
+                fields=("name", "root"), name="unique_chapter_name_per_series"
+            ),
         ),
         migrations.AddIndex(
-            model_name='world',
-            index=pgvector.django.indexes.HnswIndex(ef_construction=64, fields=['embedding'], m=16, name='world_embedding_hnsw_idx', opclasses=['vector_cosine_ops']),
+            model_name="world",
+            index=pgvector.django.indexes.HnswIndex(
+                ef_construction=64,
+                fields=["embedding"],
+                m=16,
+                name="world_embedding_hnsw_idx",
+                opclasses=["vector_cosine_ops"],
+            ),
         ),
     ]
