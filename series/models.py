@@ -1,7 +1,9 @@
+import uuid
+
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.utils import IntegrityError
+from django.utils.text import slugify
 from pgvector.django import HnswIndex, VectorField
 
 # - IMPLEMENT CHUNKING
@@ -13,7 +15,15 @@ EMBEDDING_DIMENSIONS = 1536
 
 class Genre(models.Model):
     name = models.CharField(max_length=255, unique=True)
+    slug = models.SlugField(max_length=255, unique=True)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     series = models.ManyToManyField("series.Series", related_name="genres")
+
+    def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            base_slug = slugify(self.name)
+            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"[Genre: {self.name}]"
@@ -21,7 +31,7 @@ class Genre(models.Model):
 
 class Character(models.Model):
     name = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(max_length=2000)
     series = models.ForeignKey(
         "series.Series", on_delete=models.CASCADE, related_name="characters"
     )
@@ -48,7 +58,7 @@ class Character(models.Model):
 
 
 class World(models.Model):
-    description = models.TextField()
+    description = models.TextField(max_length=4000)
     series = models.OneToOneField(
         "series.Series", on_delete=models.CASCADE, related_name="world"
     )
@@ -76,6 +86,8 @@ class SeriesVisibility(models.TextChoices):
 
 class Series(models.Model):
     name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False)
     description = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -142,6 +154,12 @@ class Series(models.Model):
         )
         return series
 
+    def save(self, *args, **kwargs) -> None:
+        if not self.slug:
+            base_slug = slugify(self.name)
+            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
+        return super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"[Series: {self.name}]"
 
@@ -149,7 +167,13 @@ class Series(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "author"], name="unique_series_name_per_author"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["slug", "author"], name="unique_series_slug_per_author"
+            ),
+            models.UniqueConstraint(
+                fields=["uid", "author"], name="unique_series_uid_per_author"
+            ),
         ]
         indexes = [
             models.Index(
@@ -164,6 +188,8 @@ class Series(models.Model):
 
 class Chapter(models.Model):
     name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False)
     prompt = models.TextField()
     content = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -208,20 +234,10 @@ class Chapter(models.Model):
 
         return series
 
-    def clean(self):
-        if self.stem and self.parent_id is not None:  # pyright: ignore[reportAttributeAccessIssue]
-            if not Chapter.objects.filter(pk=self.parent_id, stem=True).exists():  # pyright: ignore[reportAttributeAccessIssue]
-                raise ValidationError(
-                    "A stem chapter's parent must also be a stem chapter"
-                )
-        super().clean()
-
     def save(self, *args, **kwargs) -> None:
-        update_fields = kwargs.get("update_fields")
-        if update_fields is None or {"stem", "parent", "parent_id"}.intersection(
-            update_fields
-        ):
-            self.full_clean()
+        if not self.slug:
+            base_slug = slugify(self.name)
+            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -231,6 +247,12 @@ class Chapter(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "root"], name="unique_chapter_name_per_series"
+            ),
+            models.UniqueConstraint(
+                fields=["slug", "root"], name="unique_chapter_slug_per_series"
+            ),
+            models.UniqueConstraint(
+                fields=["uid", "root"], name="unique_chapter_uid_per_series"
             ),
             models.UniqueConstraint(
                 fields=["parent"],
