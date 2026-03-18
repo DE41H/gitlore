@@ -2,7 +2,6 @@ import uuid
 
 from django.conf import settings
 from django.db import models, transaction
-from django.db.utils import IntegrityError
 from django.utils.text import slugify
 from pgvector.django import HnswIndex, VectorField
 
@@ -15,14 +14,14 @@ EMBEDDING_DIMENSIONS = 1536
 
 class Genre(models.Model):
     name = models.CharField(max_length=255, unique=True)
-    slug = models.SlugField(max_length=255, unique=True)
-    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    slug = models.SlugField(max_length=270, unique=True)
+    uid = models.UUIDField(default=uuid.uuid4, editable=False)
     series = models.ManyToManyField("series.Series", related_name="genres")
 
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
             base_slug = slugify(self.name)
-            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
+            self.slug = f"{base_slug}-{self.uid.hex[:12]}"
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -32,10 +31,10 @@ class Genre(models.Model):
 class Character(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(max_length=2000)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
     series = models.ForeignKey(
         "series.Series", on_delete=models.CASCADE, related_name="characters"
     )
-    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
 
     def __str__(self) -> str:
         return f"[Character: {self.name}, Series: {self.series.name}]"
@@ -59,10 +58,10 @@ class Character(models.Model):
 
 class World(models.Model):
     description = models.TextField(max_length=4000)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
     series = models.OneToOneField(
         "series.Series", on_delete=models.CASCADE, related_name="world"
     )
-    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
 
     def __str__(self) -> str:
         return f"[World: {self.pk}, Series: {self.series.name}]"
@@ -86,19 +85,20 @@ class SeriesVisibility(models.TextChoices):
 
 class Series(models.Model):
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=255)
+    slug = models.SlugField(max_length=270)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
-    description = models.TextField()
+    synopsis = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     visibility = models.CharField(
         max_length=7, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC
     )
+    like_count = models.PositiveIntegerField(default=0)
+    likes = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, related_name="liked_series", blank=True
+    )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="series"
-    )
-    likes = models.ManyToManyField(
-        settings.AUTH_USER_MODEL, related_name="liked", blank=True
     )
     spin_off = models.ForeignKey(
         "self",
@@ -116,26 +116,13 @@ class Series(models.Model):
             .select_related("world")
             .get(pk=source_pk)
         )
-        name = source.name
-        i = 0
-        while True:
-            savepoint = transaction.savepoint()
-            try:
-                series = cls.objects.create(
-                    name=name,
-                    description=source.description,
-                    author=author,
-                    spin_off_id=source_pk if is_spin_off else None,
-                )
-                transaction.savepoint_commit(savepoint)
-                break
-            except IntegrityError as e:
-                if "unique_series_name_per_author" not in str(e):
-                    raise
-                transaction.savepoint_rollback(savepoint)
-                i += 1
-                name = f"{source.name}-{i}"
-        series.genres.set(source.genres.all())  # pyright: ignore[reportAttributeAccessIssue]
+        series = cls.objects.create(
+            name=source.name,
+            synopsis=source.synopsis,
+            author=author,
+            spin_off_id=source_pk if is_spin_off else None,
+        )
+        series.genres.add(source.genres.all())  # pyright: ignore[reportAttributeAccessIssue]
         World.objects.create(
             description=source.world.description,  # pyright: ignore[reportAttributeAccessIssue]
             series=series,
@@ -154,10 +141,22 @@ class Series(models.Model):
         )
         return series
 
+    @transaction.atomic
+    def toggle_like(self, user):
+        obj = Series.objects.select_for_update().get(pk=self.pk)
+        if obj.likes.filter(pk=user.pk).exists():
+            obj.likes.remove(user)
+            obj.like_count = models.F("like_count") - 1
+        else:
+            obj.likes.add(user)
+            obj.like_count = models.F("like_count") + 1
+        obj.save(update_fields=["like_count"])
+        self.refresh_from_db(fields=["like_count"])
+
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
             base_slug = slugify(self.name)
-            self.slug = f"{base_slug}-{self.uid.hex[:10]}"
+            self.slug = f"{base_slug}-{self.uid.hex[:12]}"
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -166,13 +165,7 @@ class Series(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["name", "author"], name="unique_series_name_per_author"
-            ),
-            models.UniqueConstraint(
                 fields=["slug", "author"], name="unique_series_slug_per_author"
-            ),
-            models.UniqueConstraint(
-                fields=["uid", "author"], name="unique_series_uid_per_author"
             ),
         ]
         indexes = [
@@ -188,50 +181,46 @@ class Series(models.Model):
 
 class Chapter(models.Model):
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=255)
+    slug = models.SlugField(max_length=270)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
     prompt = models.TextField()
     content = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    stem = models.BooleanField(default=False)
-    author = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chapters"
-    )
-    root = models.ForeignKey(
-        "series.Series", on_delete=models.CASCADE, related_name="nodes"
+    canon = models.BooleanField(default=False)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
+    series = models.ForeignKey(
+        "series.Series", on_delete=models.CASCADE, related_name="chapters"
     )
     parent = models.ForeignKey(
         "self", on_delete=models.PROTECT, related_name="children", null=True, blank=True
     )
-    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
 
     @transaction.atomic
     def create_spin_off(self, user):
-        series = Series.create_copy(self.root_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
-        chapters = {c.pk: c for c in Chapter.objects.filter(root=self.root)}
-        lineage, current = [], self
+        series = Series.create_copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
+        chapters = {ch.pk: ch for ch in self.series.chapters.all()}
+        lineage = []
+        current = self
         while current:
             lineage.append(
                 Chapter(
                     name=current.name,
                     prompt=current.prompt,
                     content=current.content,
-                    author=user,
-                    root=series,
-                    stem=True,
+                    series=series,
+                    canon=True,
                     embedding=current.embedding,
                 )
             )
             current = chapters.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
         lineage.reverse()
         created = Chapter.objects.bulk_create(lineage)
-
-        for i in range(1, len(created)):
-            created[i].parent = created[i - 1]
-        if len(created) > 1:
-            Chapter.objects.bulk_update(created[1:], ["parent"])
-
+        for i in range(len(created)):
+            if i > 0:
+                created[i].parent = created[i - 1]
+            created[i].slug = f"{slugify(created[i].name)}-{created[i].uid.hex[:12]}"
+        Chapter.objects.bulk_update(created, ["parent", "slug"])
         return series
 
     def save(self, *args, **kwargs) -> None:
@@ -241,37 +230,28 @@ class Chapter(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"[Chapter: {self.name}, Series: {self.root.name}]"
+        return f"[Chapter: {self.name}, Series: {self.series.name}]"
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["name", "root"], name="unique_chapter_name_per_series"
+                fields=["slug", "series"], name="unique_chapter_slug_per_series"
             ),
             models.UniqueConstraint(
-                fields=["slug", "root"], name="unique_chapter_slug_per_series"
+                fields=["parent", "series"],
+                condition=models.Q(canon=True),
+                name="unique_canon_child_per_parent",
             ),
             models.UniqueConstraint(
-                fields=["uid", "root"], name="unique_chapter_uid_per_series"
-            ),
-            models.UniqueConstraint(
-                fields=["parent"],
-                condition=models.Q(stem=True),
-                name="unique_stem_child_per_parent",
-            ),
-            models.UniqueConstraint(
-                fields=["root"],
-                condition=models.Q(stem=True, parent__isnull=True),
-                name="unique_stem_root_per_series",
+                fields=["series"],
+                condition=models.Q(canon=True, parent__isnull=True),
+                name="unique_canon_root_per_series",
             ),
         ]
         indexes = [
-            models.Index(fields=["root", "stem"], name="chapter_root_stem_idx"),
+            models.Index(fields=["series", "canon"], name="chapter_series_canon_idx"),
             models.Index(
-                fields=["root", "-created_at"], name="chapter_root_created_idx"
-            ),
-            models.Index(
-                fields=["author", "-created_at"], name="chapter_author_created_idx"
+                fields=["series", "-created_at"], name="chapter_series_created_idx"
             ),
             models.Index(
                 fields=["created_at"],
