@@ -91,6 +91,7 @@ class Series(models.Model):
     visibility = models.CharField(
         max_length=7, choices=SeriesVisibility.choices, default=SeriesVisibility.PUBLIC
     )
+    view_count = models.PositiveIntegerField(default=0)
     like_count = models.PositiveIntegerField(default=0)
     likes = models.ManyToManyField(
         settings.AUTH_USER_MODEL, related_name="liked_series", blank=True
@@ -105,6 +106,13 @@ class Series(models.Model):
         null=True,
         blank=True,
     )
+    spin_off_chapter = models.ForeignKey(
+        "series.Chapter",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="spin_offs_started",
+    )
     world = models.OneToOneField(
         "series.World", on_delete=models.CASCADE, related_name="series"
     )
@@ -112,7 +120,9 @@ class Series(models.Model):
 
     @classmethod
     @transaction.atomic
-    def copy(cls, source_pk, author, is_spin_off=False):
+    def copy(cls, author, source_pk, chapter_pk=None, is_spin_off=False):
+        if is_spin_off and chapter_pk is None:
+            raise ValueError("chapter_pk is required when is_spin_off=True.")
         source = (
             cls.objects.prefetch_related("characters", "genres")
             .select_related("world")
@@ -132,6 +142,7 @@ class Series(models.Model):
             visibility=source.visibility,
             author=author,
             spin_off_id=source_pk if is_spin_off else None,
+            spin_off_chapter_id=chapter_pk if is_spin_off else None,
             world=world,
         )
         series.genres.set(source.genres.all())
@@ -160,6 +171,10 @@ class Series(models.Model):
         series.save(update_fields=["like_count"])
         self.refresh_from_db(fields=["like_count"])
 
+    def add_view(self):
+        Series.objects.filter(pk=self.pk).update(view_count=models.F("view_count") + 1)
+        self.refresh_from_db(fields=["view_count"])
+
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
             base_slug = slugify(self.name)
@@ -178,6 +193,10 @@ class Series(models.Model):
                 condition=models.Q(like_count__gte=0),
                 name="like_count_non_negative",
             ),
+            models.CheckConstraint(
+                condition=models.Q(view_count__gte=0),
+                name="view_count_non_negative",
+            ),
         ]
         indexes = [
             models.Index(
@@ -190,6 +209,13 @@ class Series(models.Model):
         ]
 
 
+class ChapterStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    GENERATING = "generating", "Generating"
+    DONE = "done", "Done"
+    FAILED = "failed", "Failed"
+
+
 class Chapter(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=270, blank=True)
@@ -199,6 +225,9 @@ class Chapter(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     canon = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=10, choices=ChapterStatus.choices, default=ChapterStatus.PENDING
+    )
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
     series = models.ForeignKey(
         "series.Series", on_delete=models.CASCADE, related_name="chapters"
@@ -209,8 +238,15 @@ class Chapter(models.Model):
 
     @transaction.atomic
     def start_spin_off(self, user):
-        series = Series.copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
+        if self.status != ChapterStatus.DONE:
+            raise ValueError("Cannot spin off from a chapter that is not done.")
         lineage = self.get_lineage()
+        not_done = [c.pk for c in lineage if c.status != ChapterStatus.DONE]
+        if not_done:
+            raise ValueError(
+                f"Cannot spin off: ancestor chapters are not done: {not_done}"
+            )
+        series = Series.copy(user, self.series_id, self.pk, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
         for chapter_obj in lineage:
             chapter_obj.pk = None
             chapter_obj.uid = uuid.uuid4()
@@ -218,6 +254,7 @@ class Chapter(models.Model):
             chapter_obj.parent = None
             chapter_obj.series = series
             chapter_obj.canon = True
+            chapter_obj.status = ChapterStatus.DONE
         created = Chapter.objects.bulk_create(lineage)
         for i in range(1, len(created)):
             created[i].parent = created[i - 1]
@@ -405,6 +442,11 @@ class Chapter(models.Model):
                 fields=["series"],
                 condition=models.Q(canon=True, parent__isnull=True),
                 name="unique_canon_root_per_series",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(canon=False)
+                | models.Q(canon=True, status=ChapterStatus.DONE),
+                name="canon_chapter_must_be_done",
             ),
         ]
         indexes = [
