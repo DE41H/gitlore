@@ -37,12 +37,13 @@ The canon lineage is enforced structurally:
 - Only one root chapter per series can be canon
 - A chapter can only be canon if its parent is also canon
 - At most one canon child per parent
+- A chapter must be fully generated (`status=done`) before it can be marked canon
 
 This makes the canonical story a single, clean path through the tree, while all the "what if?" chapters live alongside it.
 
 ### Spin-offs
 
-A **spin-off** is a full copy of a series — world, characters, genres, and the entire canon lineage — attributed to a new author. The new author can then continue writing from any point in the copied lineage. The original series records the spin-off relationship.
+A **spin-off** is a full copy of a series — world, characters, genres, and the entire canon lineage up to and including the branching chapter — attributed to a new author. The new author can then continue writing from there. The spin-off records both the source series and the exact chapter it branched from. All copied chapters are validated as fully generated before the spin-off is created.
 
 ### Semantic Search for Context
 
@@ -55,9 +56,10 @@ When Claude generates a new chapter, it doesn't read the entire story. Instead, 
 | Feature | Description |
 |---|---|
 | **AI Story Engine** | Claude generates story segments from your prompts, with relevant prior chapters retrieved via semantic (vector) search |
-| **Canon Lineage** | One definitive path through each story tree; branches are preserved but clearly non-canon |
-| **Spin-offs** | Fork any series at any chapter — world, characters, and canon lineage are all copied atomically |
-| **Likes** | Atomic like/unlike with a denormalized counter; concurrency-safe via `select_for_update` |
+| **Canon Lineage** | One definitive path through each story tree; branches are preserved but clearly non-canon; enforced at DB and application level |
+| **Spin-offs** | Fork any series at any chapter — world, characters, and canon lineage are copied atomically; branching point recorded precisely |
+| **Generation Tracking** | Each chapter has a `status` (pending → generating → done/failed); canon requires `done` |
+| **Likes & Views** | Atomic like/unlike and view tracking with denormalized counters; concurrency-safe |
 | **GitHub-dark UI** | Markdown-rendered stories, branch visualization, GitHub-inspired aesthetic |
 | **Credit System** | Free daily prompt token quota; paid tiers for unlimited access via Stripe |
 | **Export** | Publish to Wattpad or Webtoon (Phase 4, planned) |
@@ -70,7 +72,10 @@ When Claude generates a new chapter, it doesn't read the entire story. Instead, 
 Series ──────────────── World (1:1)
   │                     └─ description, embedding
   ├── author (User FK)
-  ├── spin_off (self-FK, nullable)
+  ├── spin_off (self-FK, nullable)        ← source series
+  ├── spin_off_chapter (FK→Chapter, nullable) ← exact branching point
+  ├── like_count (denormalized int)
+  ├── view_count (denormalized int)
   ├── genres (M2M → Genre)
   ├── likes (M2M → User)
   └── characters ──────── Character
@@ -80,11 +85,14 @@ Chapter (tree, self-FK via parent)
   ├── series (FK → Series)
   ├── parent (FK → self, nullable = root)
   ├── canon (bool)
+  ├── status  pending | generating | done | failed
   ├── prompt / content
   └── embedding
 ```
 
 **Slugs** are auto-generated as `{slugified-name}-{uid_hex[:12]}` and are unique per parent scope (series or author).
+
+**Constraints:** a chapter cannot be `canon=True` unless `status=done` — enforced at the DB level, in `clean()`, and in `toggle_canon()`.
 
 ---
 
