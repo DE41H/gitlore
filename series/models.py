@@ -118,9 +118,13 @@ class Series(models.Model):
             .select_related("world")
             .get(pk=source_pk)
         )
+        try:
+            source_world = source.world
+        except World.DoesNotExist:
+            raise ValueError("Source series has no world and cannot be copied.")
         world = World.objects.create(
-            description=source.world.description,
-            embedding=source.world.embedding,
+            description=source_world.description,
+            embedding=source_world.embedding,
         )
         series = cls.objects.create(
             name=source.name,
@@ -247,6 +251,17 @@ class Chapter(models.Model):
                 .exists()
             ):
                 raise ValueError("A canon root chapter already exists for this series.")
+            if (
+                chapter.parent
+                and Chapter.objects.filter(
+                    series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+                    canon=True,
+                    parent_id=chapter.parent_id,  # pyright: ignore[reportAttributeAccessIssue]
+                )
+                .exclude(pk=chapter.pk)
+                .exists()
+            ):
+                raise ValueError("A canon chapter already exists for this parent.")
             chapter.canon = True
         chapter.save(update_fields=["canon"])
         self.refresh_from_db(fields=["canon"])
@@ -309,6 +324,27 @@ class Chapter(models.Model):
             current = chapter_map.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
         return lineage[::-1]
 
+    def get_descendants(self, fields: None | list[str] = None):
+        table = self.__class__._meta.db_table
+        if fields is not None:
+            col_set = sorted(set(fields) | {"id", "parent_id"})
+            col_sql = ", ".join(f'"{c}"' for c in col_set)
+            recursive_sql = ", ".join(f'c."{c}"' for c in col_set)
+        else:
+            col_sql = "*"
+            recursive_sql = "c.*"
+
+        sql = f"""
+            WITH RECURSIVE descendants AS (
+                SELECT {col_sql} FROM "{table}" WHERE id = %s
+                UNION ALL
+                SELECT {recursive_sql} FROM "{table}" c
+                INNER JOIN descendants d ON c.parent_id = d.id
+            )
+            SELECT * FROM descendants
+        """
+        return list(Chapter.objects.raw(sql, [self.pk]))
+
     def clean(self):
         if not self.canon:
             return
@@ -316,12 +352,24 @@ class Chapter(models.Model):
             try:
                 parent = Chapter.objects.get(pk=self.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
             except Chapter.DoesNotExist:
-                return
+                raise ValidationError({"parent": "Parent chapter does not exist."})
             if not parent.canon:
                 raise ValidationError(
                     {
                         "canon": "Parent chapter must be canon to set this chapter as canon."
                     }
+                )
+            if (
+                Chapter.objects.filter(
+                    series_id=self.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+                    canon=True,
+                    parent_id=self.parent_id,  # pyright: ignore[reportAttributeAccessIssue]
+                )
+                .exclude(pk=self.pk)
+                .exists()
+            ):
+                raise ValidationError(
+                    {"canon": "A canon chapter already exists for this parent."}
                 )
         else:
             qs = Chapter.objects.filter(
