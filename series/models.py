@@ -1,7 +1,7 @@
-import copy
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator
 from django.db import models, transaction
 from django.utils.text import slugify
@@ -18,7 +18,6 @@ class Genre(models.Model):
     name = models.CharField(max_length=255, unique=True)
     slug = models.SlugField(max_length=270, unique=True, blank=True)
     uid = models.UUIDField(default=uuid.uuid4, editable=False)
-    series = models.ManyToManyField("series.Series", related_name="genres")
 
     def save(self, *args, **kwargs) -> None:
         if not self.slug:
@@ -39,7 +38,7 @@ class Character(models.Model):
     )
 
     def __str__(self) -> str:
-        return f"[Character: {self.pk}, Series: {self.series_id}]"  # pyright: ignore[reportAttributeAccessIssue]
+        return f"[Character: {self.pk}]"  # pyright: ignore[reportAttributeAccessIssue]
 
     class Meta:
         constraints = [
@@ -61,12 +60,9 @@ class Character(models.Model):
 class World(models.Model):
     description = models.TextField(validators=[MaxLengthValidator(5000)])
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True)
-    series = models.OneToOneField(
-        "series.Series", on_delete=models.CASCADE, related_name="world"
-    )
 
     def __str__(self) -> str:
-        return f"[World: {self.pk}, Series: {self.series_id}]"  # pyright: ignore[reportAttributeAccessIssue]
+        return f"[World: {self.pk}]"  # pyright: ignore[reportAttributeAccessIssue]
 
     class Meta:
         indexes = [
@@ -109,34 +105,39 @@ class Series(models.Model):
         null=True,
         blank=True,
     )
+    world = models.OneToOneField(
+        "series.World", on_delete=models.CASCADE, related_name="series"
+    )
+    genres = models.ManyToManyField("series.Genre", related_name="series")
 
     @classmethod
     @transaction.atomic
-    def create_copy(cls, source_pk, author, is_spin_off=False):
+    def copy(cls, source_pk, author, is_spin_off=False):
         source = (
             cls.objects.prefetch_related("characters", "genres")
             .select_related("world")
             .get(pk=source_pk)
         )
+        world = World.objects.create(
+            description=source.world.description,
+            embedding=source.world.embedding,
+        )
         series = cls.objects.create(
             name=source.name,
             synopsis=source.synopsis,
+            visibility=source.visibility,
             author=author,
             spin_off_id=source_pk if is_spin_off else None,
+            world=world,
         )
-        series.genres.set(source.genres.all())  # pyright: ignore[reportAttributeAccessIssue]
-        World.objects.create(
-            description=source.world.description,  # pyright: ignore[reportAttributeAccessIssue]
-            series=series,
-            embedding=source.world.embedding,  # pyright: ignore[reportAttributeAccessIssue]
-        )
+        series.genres.set(source.genres.all())
         Character.objects.bulk_create(
             [
                 Character(
                     name=c.name,
                     description=c.description,
-                    series=series,
                     embedding=c.embedding,
+                    series=series,
                 )
                 for c in source.characters.all()  # pyright: ignore[reportAttributeAccessIssue]
             ]
@@ -148,14 +149,11 @@ class Series(models.Model):
         series = Series.objects.select_for_update().get(pk=self.pk)
         if series.likes.filter(pk=user.pk).exists():
             series.likes.remove(user)
-            Series.objects.filter(pk=self.pk).update(
-                like_count=models.F("like_count") - 1
-            )
+            series.like_count = models.F("like_count") - 1
         else:
             series.likes.add(user)
-            Series.objects.filter(pk=self.pk).update(
-                like_count=models.F("like_count") + 1
-            )
+            series.like_count = models.F("like_count") + 1
+        series.save(update_fields=["like_count"])
         self.refresh_from_db(fields=["like_count"])
 
     def save(self, *args, **kwargs) -> None:
@@ -207,11 +205,13 @@ class Chapter(models.Model):
 
     @transaction.atomic
     def start_spin_off(self, user):
-        series = Series.create_copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
+        series = Series.copy(self.series_id, user, is_spin_off=True)  # pyright: ignore[reportAttributeAccessIssue]
         lineage = self.get_lineage()
         for chapter_obj in lineage:
             chapter_obj.pk = None
+            chapter_obj.uid = uuid.uuid4()
             chapter_obj.slug = f"{slugify(chapter_obj.name)}-{chapter_obj.uid.hex[:12]}"
+            chapter_obj.parent = None
             chapter_obj.series = series
             chapter_obj.canon = True
         created = Chapter.objects.bulk_create(lineage)
@@ -230,13 +230,25 @@ class Chapter(models.Model):
                 raise ValueError(
                     "Cannot unset canon if there are canon children. Unset canon on children first."
                 )
-            Chapter.objects.filter(pk=self.pk).update(canon=False)
+            chapter.canon = False
         else:
             if chapter.parent and not chapter.parent.canon:
                 raise ValueError(
                     "Parent chapter must be canon to set this chapter as canon."
                 )
-            Chapter.objects.filter(pk=self.pk).update(canon=True)
+            if (
+                not chapter.parent
+                and Chapter.objects.filter(
+                    series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+                    canon=True,
+                    parent__isnull=True,
+                )
+                .exclude(pk=chapter.pk)
+                .exists()
+            ):
+                raise ValueError("A canon root chapter already exists for this series.")
+            chapter.canon = True
+        chapter.save(update_fields=["canon"])
         self.refresh_from_db(fields=["canon"])
 
     @transaction.atomic
@@ -244,37 +256,83 @@ class Chapter(models.Model):
         chapter = (
             Chapter.objects.select_for_update().select_related("parent").get(pk=self.pk)
         )
-        if not Chapter.objects.filter(
-            pk=new_parent_id,
-            series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
-        ).exists():
+        new_parent = (
+            Chapter.objects.select_for_update()
+            .select_related("series")
+            .get(pk=new_parent_id)
+        )
+        if new_parent.series_id != chapter.series_id:  # pyright: ignore[reportAttributeAccessIssue]
             raise ValueError("New parent must belong to the same series.")
         if chapter.canon:
             raise ValueError("Cannot change the parent of a canon chapter.")
-        if self in Chapter.objects.get(id=new_parent_id).get_lineage():
+        if chapter in new_parent.get_lineage(fields=["id", "parent_id"]):
             raise ValueError("Cannot set a descendant as the new parent.")
-        Chapter.objects.filter(pk=self.pk).update(parent_id=new_parent_id)
+        chapter.parent = new_parent
+        chapter.save(update_fields=["parent"])
         self.refresh_from_db(fields=["parent"])
 
     @transaction.atomic
     def remove(self):
         chapter = Chapter.objects.select_for_update().get(pk=self.pk)
+        children = Chapter.objects.filter(parent_id=chapter.pk).select_for_update()  # pyright: ignore[reportAttributeAccessIssue]
         if chapter.canon:
             raise ValueError("Cannot delete a canon chapter. Unset canon first.")
-        Chapter.objects.filter(parent_id=chapter.pk).update(parent_id=chapter.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
+        children.update(parent_id=chapter.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
         chapter.delete()
 
-    def get_lineage(self):
-        chapter_map = {
-            c.pk: copy.copy(c)
-            for c in Chapter.objects.filter(series_id=self.series_id)  # pyright: ignore[reportAttributeAccessIssue]
-        }
+    def get_lineage(self, fields: None | list[str] = None):
+        table = self.__class__._meta.db_table
+        if fields is not None:
+            col_set = sorted(set(fields) | {"id", "parent_id"})
+            col_sql = ", ".join(f'"{c}"' for c in col_set)
+            recursive_sql = ", ".join(f'c."{c}"' for c in col_set)
+        else:
+            col_sql = "*"
+            recursive_sql = "c.*"
+
+        sql = f"""
+            WITH RECURSIVE lineage AS (
+                SELECT {col_sql} FROM "{table}" WHERE id = %s
+                UNION ALL
+                SELECT {recursive_sql} FROM "{table}" c
+                INNER JOIN lineage l ON c.id = l.parent_id
+            )
+            SELECT * FROM lineage
+        """
+        chapter_map = {c.pk: c for c in Chapter.objects.raw(sql, [self.pk])}
         lineage = []
-        current = chapter_map[self.pk]
-        while current:
+        visited = set()
+        current = chapter_map.get(self.pk)
+        while current and current.pk not in visited:
             lineage.append(current)
+            visited.add(current.pk)
             current = chapter_map.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
         return lineage[::-1]
+
+    def clean(self):
+        if not self.canon:
+            return
+        if self.parent_id:  # pyright: ignore[reportAttributeAccessIssue]
+            try:
+                parent = Chapter.objects.get(pk=self.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
+            except Chapter.DoesNotExist:
+                return
+            if not parent.canon:
+                raise ValidationError(
+                    {
+                        "canon": "Parent chapter must be canon to set this chapter as canon."
+                    }
+                )
+        else:
+            qs = Chapter.objects.filter(
+                series_id=self.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+                canon=True,
+                parent__isnull=True,
+            ).exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError(
+                    {"canon": "A canon root chapter already exists for this series."}
+                )
 
     def save(self, *args, **kwargs) -> None:
         if not self.slug:

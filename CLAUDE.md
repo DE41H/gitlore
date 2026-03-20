@@ -37,14 +37,18 @@ uv run python manage.py makemigrations && uv run python manage.py migrate
 | `Genre` | `name`, `series` (M2M) | Shared across series |
 
 ### Canon Chapter Rules
-- One root canon chapter per series (`parent=NULL, canon=True`) — `unique_canon_series_per_series`
+- One root canon chapter per series (`parent=NULL, canon=True`) — `unique_canon_root_per_series`
 - At most one canon child per parent — `unique_canon_child_per_parent`
 - A canon chapter's parent must also be canon — **not yet enforced** (`Chapter.clean()` missing)
+
+### Known Issues
+- `Series.create_copy` crashes if the source series has no `World` (`RelatedObjectDoesNotExist`)
+- `Chapter.start_spin_off` does not regenerate `uid` on copied chapters; spin-off chapters share UUIDs with originals
 
 ### Key Methods
 - `Series.toggle_like(user)` — atomic; uses `select_for_update()` + `F()` expressions
 - `Series.create_copy(source_pk, author, is_spin_off=False)` — copies series with world, characters, genres
-- `Chapter.create_spin_off(user)` — calls `create_copy`, walks parent chain in Python, `bulk_create` + `bulk_update` canon chapters in root-first order
+- `Chapter.start_spin_off(user)` — calls `create_copy`, walks parent chain in Python, `bulk_create` + `bulk_update` canon chapters in root-first order
 
 ### Embeddings
 - `EMBEDDING_DIMENSIONS = 1536`
