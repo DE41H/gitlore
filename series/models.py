@@ -121,8 +121,8 @@ class Series(models.Model):
     @classmethod
     @transaction.atomic
     def copy(cls, author, source_pk, chapter_pk=None, is_spin_off=False):
-        if is_spin_off and chapter_pk is None:
-            raise ValueError("chapter_pk is required when is_spin_off=True.")
+        if is_spin_off == (chapter_pk is None):
+            raise ValueError("Invalid function parameters.")
         source = (
             cls.objects.prefetch_related("characters", "genres")
             .select_related("world")
@@ -273,6 +273,8 @@ class Chapter(models.Model):
                 )
             chapter.canon = False
         else:
+            if chapter.status != ChapterStatus.DONE:
+                raise ValueError("Cannot set canon if the chapter is not done.")
             if chapter.parent and not chapter.parent.canon:
                 raise ValueError(
                     "Parent chapter must be canon to set this chapter as canon."
@@ -385,6 +387,10 @@ class Chapter(models.Model):
     def clean(self):
         if not self.canon:
             return
+        if self.status != ChapterStatus.DONE:
+            raise ValidationError(
+                {"canon": "Chapter must be done to set this chapter as canon."}
+            )
         if self.parent_id:  # pyright: ignore[reportAttributeAccessIssue]
             try:
                 parent = Chapter.objects.get(pk=self.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
