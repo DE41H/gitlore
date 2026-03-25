@@ -5,6 +5,7 @@ from django.utils.text import slugify
 
 from series.models import (
     Chapter,
+    ChapterChunk,
     ChapterStatus,
     Character,
     CharacterChunk,
@@ -54,9 +55,9 @@ def replicate(
     )
     CharacterChunk.objects.bulk_create(
         [
-            CharacterChunk(embedding=cc.embedding, character=new_char)
-            for source_char, new_char in zip(source_characters, new_characters)
-            for cc in source_char.chunks.all()
+            CharacterChunk(embedding=cc.embedding, character=nc)
+            for sc, nc in zip(source_characters, created)
+            for cc in sc.chunks.all()
         ]
     )
     return series.pk
@@ -66,7 +67,7 @@ def replicate(
 def start_spin_off(chapter_id: int, author_id: int):
     chapter = (
         Chapter.objects.select_for_update()
-        .prefetch_related("chunks")
+        .prefetch_related("chunks", "series_chapters")
         .get(pk=chapter_id)
     )
     if chapter.status != ChapterStatus.DONE:
@@ -88,4 +89,12 @@ def start_spin_off(chapter_id: int, author_id: int):
     for i in range(1, len(created)):
         created[i].parent = created[i - 1]
     Chapter.objects.bulk_update(created[1:], ["parent"])
+    source_chapters = list(chapter.series.chapters.all())
+    ChapterChunk.objects.bulk_create(
+        [
+            ChapterChunk(embedding=cc.embedding, chapter=nc)
+            for oc, nc in zip(source_chapters, created)
+            for cc in oc.chunks.all()
+        ]
+    )
     return series_id
