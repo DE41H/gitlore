@@ -63,7 +63,7 @@ Embeddings are stored in separate chunk models, not on the main models directly:
 
 ### Known Issues
 - `like_count` is a denormalized counter; it drifts if `likes` M2M is modified outside `services/social.py:toggle_like()`
-- Chunk copying not yet implemented when replicating a series (`# IMPLEMENT CHUNK COPYING` in `services/authoring.py`)
+- `start_spin_off` uses `get_lineage()` without `fields`, fetching `SELECT *` via raw SQL — mutates those raw instances in-place before `bulk_create`; relies on `bulk_create` preserving insertion order to re-link parents
 
 ## Services (`series/services/`)
 
@@ -89,8 +89,9 @@ Business logic lives here, not on models.
 
 | Task | Args | Notes |
 |------|------|-------|
-| `create_embeddings` | `series_id` | Calls `embed_series(series_id)` |
-| `generate_chapter` | `chapter_id` | Calls `generate_chapter_content(chapter_id)` |
+| `create_series_embeddings` | `series_id` | Calls `embed_series(series_id)` |
+| `create_world_embeddings` | `world_id` | Calls `embed_world(world_id)` |
+| `create_character_embeddings` | `character_id` | Calls `embed_character(character_id)` |
 
 ## Environment Variables
 

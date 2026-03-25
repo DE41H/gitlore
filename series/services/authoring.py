@@ -2,11 +2,17 @@ from uuid import uuid4
 
 from django.db.transaction import atomic
 from django.utils.text import slugify
+
+from series.models import (
+    Chapter,
+    ChapterStatus,
+    Character,
+    CharacterChunk,
+    Series,
+    World,
+    WorldChunk,
+)
 from series.services.tree import get_lineage
-
-from series.models import Chapter, ChapterStatus, Character, Series, World
-
-# IMPLEMENT CHUNK COPYING
 
 
 @atomic
@@ -14,11 +20,19 @@ def replicate(
     series_id: int, author_id: int, spin_off_chapter_id: None | int = None
 ) -> int:
     source = (
-        Series.objects.prefetch_related("characters", "genres")
+        Series.objects.prefetch_related(
+            "characters", "genres", "characters__chunks", "world__chunks"
+        )
         .select_related("world")
         .get(pk=series_id)
     )
     world = World.objects.create(description=source.world.description)
+    WorldChunk.objects.bulk_create(
+        [
+            WorldChunk(embedding=wc.embedding, world=world)
+            for wc in source.world.chunks.all()
+        ]
+    )
     series = Series.objects.create(
         name=source.name,
         synopsis=source.synopsis,
@@ -31,10 +45,18 @@ def replicate(
         else None,
     )
     series.genres.set(source.genres.all())
-    Character.objects.bulk_create(
+    source_characters = list(source.characters.all())  # pyright: ignore[reportAttributeAccessIssue]
+    created = Character.objects.bulk_create(
         [
             Character(name=c.name, description=c.description, series=series)
-            for c in source.characters.all()  # pyright: ignore[reportAttributeAccessIssue]
+            for c in source_characters
+        ]
+    )
+    CharacterChunk.objects.bulk_create(
+        [
+            CharacterChunk(embedding=cc.embedding, character=new_char)
+            for source_char, new_char in zip(source_characters, new_characters)
+            for cc in source_char.chunks.all()
         ]
     )
     return series.pk
@@ -42,7 +64,11 @@ def replicate(
 
 @atomic
 def start_spin_off(chapter_id: int, author_id: int):
-    chapter = Chapter.objects.select_for_update().get(pk=chapter_id)
+    chapter = (
+        Chapter.objects.select_for_update()
+        .prefetch_related("chunks")
+        .get(pk=chapter_id)
+    )
     if chapter.status != ChapterStatus.DONE:
         raise ValueError("Cannot spin off from a chapter that is not done.")
     lineage = get_lineage(chapter.pk)
