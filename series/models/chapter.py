@@ -92,7 +92,7 @@ class ChapterChunk(models.Model):
         return f"[ChapterChunk: {self.pk}]"
 
     class Meta:
-        app_label = "series."
+        app_label = "series"
         indexes = [
             HnswIndex(
                 fields=["embedding"],

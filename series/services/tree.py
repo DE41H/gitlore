@@ -21,7 +21,7 @@ def change_parent(chapter_id: int, new_parent_id: int) -> None:
 
 
 def get_lineage(chapter_id: int, fields: None | list[str] = None):
-    chapter = Chapter.objects.get(chapter_id)
+    chapter = Chapter.objects.get(pk=chapter_id)
     table = chapter.__class__._meta.db_table
     if fields is not None:
         col_set = sorted(set(fields) | {"id", "parent_id"})
@@ -51,7 +51,7 @@ def get_lineage(chapter_id: int, fields: None | list[str] = None):
 
 
 def get_descendants(chapter_id: int, fields: None | list[str] = None):
-    chapter = Chapter.objects.get(chapter_id)
+    chapter = Chapter.objects.get(pk=chapter_id)
     table = chapter.__class__._meta.db_table
     if fields is not None:
         col_set = sorted(set(fields) | {"id", "parent_id"})

@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from django.db.transaction import atomic
 from django.utils.text import slugify
-from services.tree import get_lineage
+from series.services.tree import get_lineage
 
 from series.models import Chapter, ChapterStatus, Character, Series, World
 

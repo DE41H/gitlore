@@ -26,6 +26,10 @@ SECRET_KEY = getenv("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = getenv("DJANGO_DEBUG") == "true"
 
+# Constants
+EMBEDDING_DIMENSIONS = 1536
+
+
 ALLOWED_HOSTS = (
     getenv("DJANGO_ALLOWED_HOSTS", "").split(" ")
     if getenv("DJANGO_ALLOWED_HOSTS")
