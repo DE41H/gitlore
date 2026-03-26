@@ -5,6 +5,7 @@ from series.ai.gemini import client, embedding_model
 from series.models import Character, CharacterChunk, Series, World, WorldChunk
 from series.services.text import split_text
 
+EMBEDDING_DIMENSIONS = 1536
 EMBED_BATCH_SIZE = 100  # CALCULATE BATCH SIZE AND ADD SAFETY MEASURES SO USERS DONT PROVIDE TOO MUCH CONTEXT
 
 

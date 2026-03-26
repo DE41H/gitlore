@@ -1,7 +1,8 @@
-from django.conf import settings
 from django.core.validators import MaxLengthValidator
 from django.db import models
 from pgvector.django import HnswIndex, VectorField
+
+from series.ai.embedding import EMBEDDING_DIMENSIONS
 
 
 class World(models.Model):
@@ -15,7 +16,7 @@ class World(models.Model):
 
 
 class WorldChunk(models.Model):
-    embedding = VectorField(dimensions=settings.EMBEDDING_DIMENSIONS)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     world = models.ForeignKey(
         "series.World", on_delete=models.CASCADE, related_name="chunks"
     )

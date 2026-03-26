@@ -1,7 +1,8 @@
-from django.conf import settings
 from django.core.validators import MaxLengthValidator
 from django.db import models
 from pgvector.django import HnswIndex, VectorField
+
+from series.ai.embedding import EMBEDDING_DIMENSIONS
 
 
 class Character(models.Model):
@@ -24,7 +25,7 @@ class Character(models.Model):
 
 
 class CharacterChunk(models.Model):
-    embedding = VectorField(dimensions=settings.EMBEDDING_DIMENSIONS)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     character = models.ForeignKey(
         "series.Character", on_delete=models.CASCADE, related_name="chunks"
     )

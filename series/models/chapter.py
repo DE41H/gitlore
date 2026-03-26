@@ -1,12 +1,13 @@
 from uuid import uuid4
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.db.transaction import atomic
 from django.utils.text import slugify
 from pgvector.django import HnswIndex, VectorField
+
+from series.ai.embedding import EMBEDDING_DIMENSIONS
 
 
 class ChapterStatus(models.TextChoices):
@@ -83,7 +84,7 @@ class Chapter(models.Model):
 
 
 class ChapterChunk(models.Model):
-    embedding = VectorField(dimensions=settings.EMBEDDING_DIMENSIONS)
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     chapter = models.ForeignKey(
         "series.Chapter", on_delete=models.CASCADE, related_name="chunks"
     )
