@@ -10,3 +10,4 @@ docker/
 .gitignore
 .python-version
 *.md
+LICENSE
