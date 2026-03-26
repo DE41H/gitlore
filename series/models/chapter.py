@@ -84,6 +84,7 @@ class Chapter(models.Model):
 
 
 class ChapterChunk(models.Model):
+    chunk = models.TextField()
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     chapter = models.ForeignKey(
         "series.Chapter", on_delete=models.CASCADE, related_name="chunks"

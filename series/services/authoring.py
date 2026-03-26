@@ -82,7 +82,7 @@ def start_spin_off(chapter_id: int, author_id: int):
         chapter_obj.uid = uuid4()
         chapter_obj.slug = f"{slugify(chapter_obj.name)}-{chapter_obj.uid.hex[:12]}"
         chapter_obj.parent = None
-        chapter_obj.series_id = series_id
+        chapter_obj.series_id = series_id  # pyright: ignore[reportAttributeAccessIssue]
         chapter_obj.canon = True
         chapter_obj.status = ChapterStatus.DONE
     created = Chapter.objects.bulk_create(lineage)

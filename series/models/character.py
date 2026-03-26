@@ -25,6 +25,7 @@ class Character(models.Model):
 
 
 class CharacterChunk(models.Model):
+    chunk = models.TextField()
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     character = models.ForeignKey(
         "series.Character", on_delete=models.CASCADE, related_name="chunks"

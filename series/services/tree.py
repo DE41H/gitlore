@@ -20,7 +20,7 @@ def change_parent(chapter_id: int, new_parent_id: int) -> None:
     chapter.save(update_fields=["parent_id"])
 
 
-def get_lineage(chapter_id: int, fields: None | list[str] = None):
+def get_lineage(chapter_id: int, fields: None | list[str] = None) -> list[Chapter]:
     chapter = Chapter.objects.get(pk=chapter_id)
     table = chapter.__class__._meta.db_table
     if fields is not None:
@@ -47,10 +47,10 @@ def get_lineage(chapter_id: int, fields: None | list[str] = None):
         lineage.append(current)
         visited.add(current.pk)
         current = chapter_map.get(current.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
-    return lineage[::-1]
+    return lineage
 
 
-def get_descendants(chapter_id: int, fields: None | list[str] = None):
+def get_descendants(chapter_id: int, fields: None | list[str] = None) -> list[Chapter]:
     chapter = Chapter.objects.get(pk=chapter_id)
     table = chapter.__class__._meta.db_table
     if fields is not None:

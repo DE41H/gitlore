@@ -16,6 +16,7 @@ class World(models.Model):
 
 
 class WorldChunk(models.Model):
+    chunk = models.TextField()
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS)
     world = models.ForeignKey(
         "series.World", on_delete=models.CASCADE, related_name="chunks"

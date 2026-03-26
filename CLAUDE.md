@@ -53,7 +53,7 @@ Embeddings are stored in separate chunk models, not on the main models directly:
 | `CharacterChunk` | `embedding` (VectorField), `character` (FK) | Chunked character description embeddings |
 | `ChapterChunk` | `embedding` (VectorField), `chapter` (FK) | Chunked chapter content embeddings |
 
-`EMBEDDING_DIMENSIONS = 1536` (defined in `settings.py`). All chunk models use HNSW indexes (`vector_cosine_ops`, m=16, ef_construction=64).
+`EMBEDDING_DIMENSIONS = 1536` (defined in `series/ai/embedding.py`). All chunk models use HNSW indexes (`vector_cosine_ops`, m=16, ef_construction=64).
 
 ### Canon Chapter Rules
 - One root canon chapter per series (`parent=NULL, canon=True`) — `unique_canon_root_per_series`

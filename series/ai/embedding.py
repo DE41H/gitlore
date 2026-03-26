@@ -2,7 +2,13 @@ from django.db.transaction import atomic
 from google.genai import types
 
 from series.ai.gemini import client, embedding_model
-from series.models import Character, CharacterChunk, Series, World, WorldChunk
+from series.models import (
+    Character,
+    CharacterChunk,
+    Series,
+    World,
+    WorldChunk,
+)
 from series.services.text import split_text
 
 EMBEDDING_DIMENSIONS = 1536
@@ -18,32 +24,37 @@ def get_embeddings(text_list: list[str], task_type: str = "retrieval_document") 
             contents=batch,
             config=types.EmbedContentConfig(task_type=task_type),
         )
-        if response.embeddings:
-            embeddings.extend([e.values for e in response.embeddings])
+        if not response.embeddings:
+            raise ValueError(f"Embedding API returned no embeddings for batch starting at index {i}")
+        embeddings.extend([e.values for e in response.embeddings])
     return embeddings
 
 
-def embed_world(world_id: int, embeddings: list | None = None) -> None:
+def embed_world(world_id: int) -> None:
     world = World.objects.get(pk=world_id)
-    if embeddings is None:
-        chunks = split_text(world.description)
-        embeddings = get_embeddings(chunks)
+    chunks = split_text(world.description)
+    embeddings = get_embeddings(chunks)
     with atomic():
         WorldChunk.objects.filter(world_id=world_id).delete()
         WorldChunk.objects.bulk_create(
-            [WorldChunk(world=world, embedding=e) for e in embeddings]
+            [
+                WorldChunk(world=world, embedding=e, chunk=c)
+                for e, c in zip(embeddings, chunks)
+            ]
         )
 
 
-def embed_character(character_id: int, embeddings: list | None = None) -> None:
+def embed_character(character_id: int) -> None:
     character = Character.objects.get(pk=character_id)
-    if embeddings is None:
-        chunks = split_text(character.description)
-        embeddings = get_embeddings([f"{character.name}: {chunk}" for chunk in chunks])
+    chunks = split_text(character.description)
+    embeddings = get_embeddings([f"{character.name}: {chunk}" for chunk in chunks])
     with atomic():
         CharacterChunk.objects.filter(character=character).delete()
         CharacterChunk.objects.bulk_create(
-            [CharacterChunk(character=character, embedding=e) for e in embeddings]
+            [
+                CharacterChunk(character=character, embedding=e, chunk=c)
+                for e, c in zip(embeddings, chunks)
+            ]
         )
 
 
@@ -55,7 +66,7 @@ def embed_series(series_id: int) -> None:
     )
     world_chunks = split_text(world.description)
     character_chunks = {c: split_text(c.description) for c in characters}
-    combined_texts = [*world_chunks] + [
+    combined_texts = world_chunks + [
         f"{c.name}: {chunk}"
         for c, chunks in character_chunks.items()
         for chunk in chunks
@@ -68,12 +79,16 @@ def embed_series(series_id: int) -> None:
         char_embeddings = all_embeddings[offset : offset + len(chunks)]
         offset += len(chunks)
         all_character_chunks.extend(
-            CharacterChunk(character=c, embedding=e) for e in char_embeddings
+            CharacterChunk(character=c, embedding=e, chunk=t)
+            for e, t in zip(char_embeddings, chunks)
         )
     with atomic():
         WorldChunk.objects.filter(world=world).delete()
         WorldChunk.objects.bulk_create(
-            [WorldChunk(world=world, embedding=e) for e in world_embeddings]
+            [
+                WorldChunk(world=world, embedding=e, chunk=t)
+                for e, t in zip(world_embeddings, world_chunks)
+            ]
         )
         CharacterChunk.objects.filter(character__series_id=series.pk).delete()
         CharacterChunk.objects.bulk_create(all_character_chunks)
