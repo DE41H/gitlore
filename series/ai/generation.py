@@ -11,13 +11,7 @@ TEMPERATURE = 0.7
 
 
 def generate_content(chapter_id: int) -> None:
-    chapter = (
-        Chapter.objects.select_related("series")
-        .prefetch_related(
-            "series__world__chunks", "series__characters", "series__characters__chunks"
-        )
-        .get(pk=chapter_id)
-    )
+    chapter = Chapter.objects.select_related("series").get(pk=chapter_id)
     if chapter.content:
         raise ValueError("Chapter already has content.")
     embedding = get_embeddings([chapter.prompt], task_type="retrieval_query")[0]
@@ -51,7 +45,7 @@ def generate_content(chapter_id: int) -> None:
     except Exception:
         chapter.status = ChapterStatus.FAILED
         chapter.save(update_fields=["status"])
-        raise ValueError("Chapter generation failed.")
+        raise
 
 
 def get_context(chapter_id: int, series_id: int, embedding: list[float]) -> str:

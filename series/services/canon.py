@@ -7,6 +7,7 @@ from series.models import Chapter, ChapterStatus
 def toggle_canon(chapter_id: int) -> None:
     chapter = (
         Chapter.objects.select_for_update()
+        .select_related("parent")
         .prefetch_related("children")
         .get(pk=chapter_id)
     )

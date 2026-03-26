@@ -13,14 +13,14 @@ from series.tasks import (
 
 @receiver(post_save, sender=Character)
 def on_character_saved(sender, instance, created, update_fields, **kwargs):
-    if created or {"description", "name"}.intersection(update_fields or []):
+    if created or update_fields is None or {"description", "name"}.intersection(update_fields):
         character_id: int = instance.id
         on_commit(lambda: create_character_embeddings.delay(character_id))
 
 
 @receiver(post_save, sender=World)
 def on_world_saved(sender, instance, created, update_fields, **kwargs):
-    if created or {"description"}.intersection(update_fields or []):
+    if created or update_fields is None or {"description"}.intersection(update_fields):
         world_id: int = instance.id
         on_commit(lambda: create_world_embeddings.delay(world_id))
 
@@ -36,4 +36,4 @@ def on_series_saved(sender, instance, created, update_fields, **kwargs):
 def on_chapter_saved(sender, instance, created, update_fields, **kwargs):
     if created:
         chapter_id: int = instance.id
-        on_commit(lambda: generate_chapter_content(chapter_id))
+        on_commit(lambda: generate_chapter_content.delay(chapter_id))

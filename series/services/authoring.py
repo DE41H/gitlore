@@ -1,3 +1,4 @@
+from collections import defaultdict
 from uuid import uuid4
 
 from django.db.transaction import atomic
@@ -30,7 +31,7 @@ def replicate(
     world = World.objects.create(description=source.world.description)
     WorldChunk.objects.bulk_create(
         [
-            WorldChunk(embedding=wc.embedding, world=world)
+            WorldChunk(chunk=wc.chunk, embedding=wc.embedding, world=world)
             for wc in source.world.chunks.all()
         ]
     )
@@ -55,7 +56,7 @@ def replicate(
     )
     CharacterChunk.objects.bulk_create(
         [
-            CharacterChunk(embedding=cc.embedding, character=nc)
+            CharacterChunk(chunk=cc.chunk, embedding=cc.embedding, character=nc)
             for sc, nc in zip(source_characters, created)
             for cc in sc.chunks.all()
         ]
@@ -65,17 +66,14 @@ def replicate(
 
 @atomic
 def start_spin_off(chapter_id: int, author_id: int):
-    chapter = (
-        Chapter.objects.select_for_update()
-        .prefetch_related("chunks", "series_chapters")
-        .get(pk=chapter_id)
-    )
+    chapter = Chapter.objects.select_for_update().get(pk=chapter_id)
     if chapter.status != ChapterStatus.DONE:
         raise ValueError("Cannot spin off from a chapter that is not done.")
     lineage = get_lineage(chapter.pk)
     not_done = [c.pk for c in lineage if c.status != ChapterStatus.DONE]
     if not_done:
         raise ValueError(f"Cannot spin off: ancestor chapters are not done: {not_done}")
+    original_lineage_ids = [c.pk for c in lineage]
     series_id = replicate(chapter.series_id, author_id, chapter_id)  # pyright: ignore[reportAttributeAccessIssue]
     for chapter_obj in lineage:
         chapter_obj.pk = None
@@ -89,12 +87,14 @@ def start_spin_off(chapter_id: int, author_id: int):
     for i in range(1, len(created)):
         created[i].parent = created[i - 1]
     Chapter.objects.bulk_update(created[1:], ["parent"])
-    source_chapters = list(chapter.series.chapters.all())
+    chunks_by_chapter: dict[int, list] = defaultdict(list)
+    for cc in ChapterChunk.objects.filter(chapter_id__in=original_lineage_ids):
+        chunks_by_chapter[cc.chapter_id].append(cc)  # pyright: ignore[reportAttributeAccessIssue]
     ChapterChunk.objects.bulk_create(
         [
-            ChapterChunk(embedding=cc.embedding, chapter=nc)
-            for oc, nc in zip(source_chapters, created)
-            for cc in oc.chunks.all()
+            ChapterChunk(chunk=cc.chunk, embedding=cc.embedding, chapter=new_chapter)
+            for orig_id, new_chapter in zip(original_lineage_ids, created)
+            for cc in chunks_by_chapter[orig_id]
         ]
     )
     return series_id

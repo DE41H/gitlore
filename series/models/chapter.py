@@ -39,7 +39,7 @@ class Chapter(models.Model):
     @atomic
     def delete(self, *args, **kwargs) -> tuple[int, dict[str, int]]:
         chapter = Chapter.objects.select_for_update().get(pk=self.pk)
-        if self.canon:
+        if chapter.canon:
             raise ValidationError("Cannot delete a canon chapter")
         Chapter.objects.filter(parent_id=self.pk).update(parent_id=chapter.parent_id)  # pyright: ignore[reportAttributeAccessIssue]
         return super().delete(*args, **kwargs)

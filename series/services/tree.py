@@ -14,7 +14,7 @@ def change_parent(chapter_id: int, new_parent_id: int) -> None:
         raise ValueError("Cannot change the parent of a canon chapter.")
     if new_parent_id == old_parent_id:
         raise ValueError("Parent has not changed.")
-    if chapter in get_lineage(chapter_id, fields=["id", "parent_id"]):
+    if new_parent_id in {c.pk for c in get_descendants(chapter_id, fields=["id"])}:
         raise ValueError("Cannot set a descendant as the new parent.")
     chapter.parent = new_parent
     chapter.save(update_fields=["parent_id"])

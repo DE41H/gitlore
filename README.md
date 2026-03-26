@@ -8,7 +8,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white)](https://python.org)
 [![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)](https://djangoproject.com)
-[![Claude API](https://img.shields.io/badge/Powered%20by-Claude%20AI-8A2BE2)](https://anthropic.com)
+[![Gemini](https://img.shields.io/badge/Powered%20by-Gemini%20AI-4285F4?logo=google&logoColor=white)](https://ai.google.dev)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 </div>
@@ -55,7 +55,7 @@ When Claude generates a new chapter, it doesn't read the entire story. Instead, 
 
 | Feature | Description |
 |---|---|
-| **AI Story Engine** | Claude generates story segments from your prompts, with relevant prior chapters retrieved via semantic (vector) search |
+| **AI Story Engine** | Gemini generates story segments from your prompts, with relevant prior chapters retrieved via semantic (vector) search |
 | **Canon Lineage** | One definitive path through each story tree; branches are preserved but clearly non-canon; enforced at DB and application level |
 | **Spin-offs** | Fork any series at any chapter — world, characters, and canon lineage are copied atomically; branching point recorded precisely |
 | **Generation Tracking** | Each chapter has a `status` (pending → generating → done/failed); canon requires `done` |
@@ -101,7 +101,7 @@ Chapter (tree, self-FK via parent)
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | Django 6 (Python 3.14), ORM, auth, admin |
-| **AI** | Anthropic Claude API — story generation via Celery async tasks |
+| **AI** | Google Gemini API (`gemini-2.5-flash` + `text-embedding-004`) — story generation via Celery async tasks |
 | **Database** | PostgreSQL + pgvector — story graph, semantic search (HNSW indexes) |
 | **Task Queue** | Celery + Redis; 300s task time limit |
 | **Infrastructure** | Docker + Nginx |
@@ -151,6 +151,7 @@ uv run python manage.py runserver
 | `POSTGRES_HOST` | Database host |
 | `POSTGRES_PORT` | Database port |
 | `CELERY_BROKER_URL` | Redis URL for Celery |
+| `GOOGLE_API_KEY` | Gemini API key |
 
 ### Running Tests
 
@@ -188,5 +189,5 @@ Phase 5 — Launch           Production deployment · Community feedback loop
 ---
 
 <div align="center">
-  <sub>Built with Claude · Django · and a love for storytelling</sub>
+  <sub>Built with Gemini · Django · and a love for storytelling</sub>
 </div>

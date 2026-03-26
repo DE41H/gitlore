@@ -9,7 +9,7 @@ def toggle_like(series_id: int, user_id: int) -> None:
     series = (
         Series.objects.select_for_update().prefetch_related("likes").get(pk=series_id)
     )
-    if series.likes.filter(pk=user_id).exists():
+    if any(u.pk == user_id for u in series.likes.all()):
         series.likes.remove(user_id)
         series.like_count = F("like_count") - 1
     else:
