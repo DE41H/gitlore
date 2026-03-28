@@ -11,8 +11,7 @@ from series.models import (
 )
 from series.services.text import split_text
 
-EMBEDDING_DIMENSIONS = 1536
-EMBED_BATCH_SIZE = 100  # CALCULATE BATCH SIZE AND ADD SAFETY MEASURES SO USERS DONT PROVIDE TOO MUCH CONTEXT
+EMBED_BATCH_SIZE = 200
 
 
 def get_embeddings(text_list: list[str], task_type: str = "retrieval_document") -> list:
@@ -25,7 +24,9 @@ def get_embeddings(text_list: list[str], task_type: str = "retrieval_document") 
             config=types.EmbedContentConfig(task_type=task_type),
         )
         if not response.embeddings:
-            raise ValueError(f"Embedding API returned no embeddings for batch starting at index {i}")
+            raise ValueError(
+                f"Embedding API returned no embeddings for batch starting at index {i}"
+            )
         embeddings.extend([e.values for e in response.embeddings])
     return embeddings
 
@@ -35,7 +36,7 @@ def embed_world(world_id: int) -> None:
     chunks = split_text(world.description)
     embeddings = get_embeddings(chunks)
     with atomic():
-        WorldChunk.objects.filter(world_id=world_id).delete()
+        WorldChunk.objects.filter(world=world_id).delete()
         WorldChunk.objects.bulk_create(
             [
                 WorldChunk(world=world, embedding=e, chunk=c)
@@ -62,7 +63,7 @@ def embed_series(series_id: int) -> None:
     series = Series.objects.get(pk=series_id)
     world = World.objects.get(pk=series.world_id)  # pyright: ignore[reportAttributeAccessIssue]
     characters = list(
-        Character.objects.filter(series_id=series.pk).only("id", "name", "description")
+        Character.objects.filter(series=series.pk).only("id", "name", "description")
     )
     world_chunks = split_text(world.description)
     character_chunks = {c: split_text(c.description) for c in characters}
@@ -90,5 +91,5 @@ def embed_series(series_id: int) -> None:
                 for e, t in zip(world_embeddings, world_chunks)
             ]
         )
-        CharacterChunk.objects.filter(character__series_id=series.pk).delete()
+        CharacterChunk.objects.filter(character__series=series.pk).delete()
         CharacterChunk.objects.bulk_create(all_character_chunks)

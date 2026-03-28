@@ -46,7 +46,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.prod
-    command: celery -A config worker -l info --concurrency 6
+    entrypoint: []
+    command: celery -A config worker -l info --concurrency 6 --uid=nobody
     env_file:
       - ../secrets/.env.prod
     depends_on:

@@ -23,7 +23,7 @@ def toggle_canon(chapter_id: int) -> None:
     elif (
         parent_id is None
         and Chapter.objects.filter(
-            series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+            series=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
             canon=True,
             parent__isnull=True,
         ).exists()
@@ -32,9 +32,9 @@ def toggle_canon(chapter_id: int) -> None:
     elif (
         parent_id
         and Chapter.objects.filter(
-            series_id=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
+            series=chapter.series_id,  # pyright: ignore[reportAttributeAccessIssue]
             canon=True,
-            parent_id=parent_id,
+            parent=parent_id,
         ).exists()
     ):
         raise ValueError("A canon chapter already exists for this parent.")

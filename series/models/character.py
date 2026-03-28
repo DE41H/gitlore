@@ -2,7 +2,7 @@ from django.core.validators import MaxLengthValidator
 from django.db import models
 from pgvector.django import HnswIndex, VectorField
 
-from series.ai.embedding import EMBEDDING_DIMENSIONS
+from series.ai.gemini import EMBEDDING_DIMENSIONS
 
 
 class Character(models.Model):

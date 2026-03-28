@@ -20,3 +20,7 @@ def toggle_like(series_id: int, user_id: int) -> None:
 
 def add_view(series_id: int) -> None:
     Series.objects.filter(pk=series_id).update(view_count=F("view_count") + 1)
+
+
+def get_like_status(series_id: int, user_id: int) -> bool:
+    return Series.objects.filter(pk=series_id, likes=user_id).exists()

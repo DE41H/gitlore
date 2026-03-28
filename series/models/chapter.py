@@ -7,7 +7,7 @@ from django.db.transaction import atomic
 from django.utils.text import slugify
 from pgvector.django import HnswIndex, VectorField
 
-from series.ai.embedding import EMBEDDING_DIMENSIONS
+from series.ai.gemini import EMBEDDING_DIMENSIONS
 
 
 class ChapterStatus(models.TextChoices):

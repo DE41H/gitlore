@@ -57,21 +57,21 @@ def get_context(chapter_id: int, series_id: int, embedding: list[float]) -> str:
     ) = ("", "", "", "")
     for cc in (
         CharacterChunk.objects.select_related("character")
-        .filter(character__series_id=series_id)
+        .filter(character__series=series_id)
         .annotate(distance=CosineDistance("embedding", embedding))
         .order_by("distance")
         .only("chunk", "character__name")[:10]
     ):
         relevant_character_notes += f"{cc.character.name}: {cc.chunk}\n"
     for cc in (
-        ChapterChunk.objects.filter(chapter__series_id=series_id)
+        ChapterChunk.objects.filter(chapter__series=series_id)
         .annotate(distance=CosineDistance("embedding", embedding))
         .order_by("distance")
         .only("chunk")[:10]
     ):
         relevant_chapter_notes += f"{cc.chunk}\n"
     for wc in (
-        WorldChunk.objects.filter(world__series_id=series_id)
+        WorldChunk.objects.filter(world__series=series_id)
         .annotate(distance=CosineDistance("embedding", embedding))
         .order_by("distance")
         .only("chunk")[:5]

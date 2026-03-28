@@ -18,6 +18,103 @@ from series.services.tree import get_lineage
 
 
 @atomic
+def create_series(
+    author_id: int,
+    name: str,
+    synopsis: str,
+    visibility: str,
+    world_description: str,
+    genre_ids: list[int],
+) -> int:
+    world = World.objects.create(description=world_description)
+    series = Series.objects.create(
+        author=author_id,
+        name=name,
+        synopsis=synopsis,
+        visibility=visibility,
+        world=world,
+    )
+    series.genres.set(genre_ids)
+    return series.pk
+
+
+@atomic
+def update_series(
+    series_id: int,
+    user_id: int,
+    name: str,
+    synopsis: str,
+    visibility: str,
+    genre_ids: list[int],
+) -> None:
+    series = Series.objects.select_for_update().get(pk=series_id)
+    if series.author_id != user_id:  # pyright: ignore[reportAttributeAccessIssue]
+        raise PermissionError
+    series.name = name
+    series.synopsis = synopsis
+    series.visibility = visibility
+    series.save(update_fields=["name", "synopsis", "visibility", "updated_at"])
+    series.genres.set(genre_ids)
+
+
+@atomic
+def add_characters(
+    series_id: int, user_id: int, name_list: list[str], description_list: list[str]
+) -> list[Character]:
+    series = Series.objects.select_for_update().only("author_id").get(pk=series_id)
+    if series.author_id != user_id:  # pyright: ignore[reportAttributeAccessIssue]
+        raise PermissionError
+    characters = [
+        Character(name=n, description=d) for n, d in zip(name_list, description_list)
+    ]
+    return Character.objects.bulk_create(characters)
+
+
+@atomic
+def update_character(
+    character_id: int, user_id: int, name: str, description: str
+) -> None:
+    character = (
+        Character.objects.select_related("series")
+        .select_for_update()
+        .only("series__author_id")
+        .get(pk=character_id)
+    )
+    if character.series.author_id != user_id:
+        raise PermissionError
+    character.name = name
+    character.description = description
+    character.save(update_fields=["name", "description"])
+
+
+@atomic
+def update_world(world_id: int, user_id: int, description: str) -> None:
+    world = (
+        World.objects.select_related("series")
+        .select_for_update()
+        .only("series__author_id")
+        .get(pk=world_id)
+    )
+    if world.series.author_id != user_id:  # pyright: ignore[reportAttributeAccessIssue]
+        raise PermissionError
+    world.description = description
+    world.save(update_fields=["description"])
+
+
+@atomic
+def delete_character(character_id: int, user_id: int) -> None:
+    character = (
+        Character.objects.select_related("series")
+        .select_for_update()
+        .only("series__author_id")
+        .get(pk=character_id)
+    )
+    if character.series.author_id != user_id:
+        raise PermissionError
+    character.delete()
+
+
+@atomic
 def replicate(
     series_id: int, author_id: int, spin_off_chapter_id: None | int = None
 ) -> int:
@@ -39,10 +136,10 @@ def replicate(
         name=source.name,
         synopsis=source.synopsis,
         visibility=source.visibility,
-        author_id=author_id,
+        author=author_id,
         world=world,
-        spin_off_id=series_id if spin_off_chapter_id is not None else None,
-        spin_off_chapter_id=spin_off_chapter_id
+        spin_off=series_id if spin_off_chapter_id is not None else None,
+        spin_off_chapter=spin_off_chapter_id
         if spin_off_chapter_id is not None
         else None,
     )
@@ -88,7 +185,7 @@ def start_spin_off(chapter_id: int, author_id: int):
         created[i].parent = created[i - 1]
     Chapter.objects.bulk_update(created[1:], ["parent"])
     chunks_by_chapter: dict[int, list] = defaultdict(list)
-    for cc in ChapterChunk.objects.filter(chapter_id__in=original_lineage_ids):
+    for cc in ChapterChunk.objects.filter(chapter__in=original_lineage_ids):
         chunks_by_chapter[cc.chapter_id].append(cc)  # pyright: ignore[reportAttributeAccessIssue]
     ChapterChunk.objects.bulk_create(
         [
