@@ -3,13 +3,15 @@ name = "gitlore"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14.3"
+requires-python = ">=3.13"
 dependencies = [
     "celery>=5.6.2",
     "celery-types>=0.26.0",
     "django>=6.0.3",
     "google-genai>=1.0.0",
     "gunicorn>=25.1.0",
+    "langchain>=1.2.13",
+    "langchain-core>=1.2.20",
     "langchain-text-splitters>=1.1.1",
     "pgvector>=0.4.2",
     "psycopg2-binary>=2.9.11",
@@ -25,7 +27,7 @@ dev = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.14"
+pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "basic"
