@@ -18,8 +18,8 @@ def create_chapter(
         if parent.series_id != series_id:  # pyright: ignore[reportAttributeAccessIssue]
             raise ValueError("Parent chapter does not belong to this series.")
     chapter = Chapter.objects.create(
-        series=series_id,
-        parent=parent_id,
+        series_id=series_id,
+        parent_id=parent_id,
         name=name,
         prompt=prompt,
     )

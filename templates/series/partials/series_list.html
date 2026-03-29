@@ -1,0 +1,11 @@
+<div id="series-grid" class="series-grid">
+  {% for series in series_list %}
+    {% include "series/partials/series_card.html" with series=series %}
+  {% empty %}
+  <div class="empty-state" style="grid-column:1/-1">
+    <div class="empty-icon">✦</div>
+    <h3>No stories found</h3>
+    <p>Try a different filter or <a href="{% url 'series:series-create' %}" style="color:var(--accent-hover)">write the first one</a>.</p>
+  </div>
+  {% endfor %}
+</div>

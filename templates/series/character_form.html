@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Edit Character{% else %}Add Characters{% endif %} — {{ series.name }} — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container-sm" style="max-width:640px">
+  <div class="page-header">
+    <p style="font-size:.85rem; color:var(--muted); margin-bottom:.2rem">
+      <a href="{% url 'series:series-detail' series.uid %}">← {{ series.name }}</a>
+    </p>
+    <h1 style="font-size:1.5rem">{% if editing %}Edit Character{% else %}Add Characters{% endif %}</h1>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if editing %}
+    <div class="card">
+      <div class="form-group">
+        <label>Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<ul class="form-errors">{% for e in form.name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Description</label>
+        {{ form.description }}
+        {% if form.description.errors %}<ul class="form-errors">{% for e in form.description.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    </div>
+
+    {% else %}
+    {{ formset.management_form }}
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem">
+      <p style="font-size:.875rem; color:var(--muted)">Characters help the AI stay consistent with your story.</p>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addCharacterRow()">+ Add row</button>
+    </div>
+
+    <div id="character-rows">
+      {% for char_form in formset %}
+      <div class="char-row card" style="margin-bottom:.6rem; padding:1rem">
+        <div style="display:grid; grid-template-columns:1fr 2fr; gap:.75rem; align-items:start">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Name</label>
+            {{ char_form.name }}
+          </div>
+          <div style="display:flex; gap:.5rem; align-items:start">
+            <div class="form-group" style="margin-bottom:0; flex:1">
+              <label>Description</label>
+              {{ char_form.description }}
+            </div>
+            <button type="button" class="remove-btn" onclick="removeRow(this)" title="Remove">✕</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div id="empty-hint" style="{% if formset.forms %}display:none{% endif %}; text-align:center; padding:2rem; border:1px dashed var(--border); border-radius:8px; color:var(--muted); font-size:.875rem; margin-bottom:.75rem">
+      Click "Add row" to add a character.
+    </div>
+    {% endif %}
+
+    <div style="display:flex; gap:.75rem; margin-top:1rem">
+      <button type="submit" class="btn btn-primary">{% if editing %}Save Character{% else %}Save Characters{% endif %}</button>
+      <a href="{% url 'series:series-detail' series.uid %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% if not editing %}
+<template id="row-template">
+  <div class="char-row card" style="margin-bottom:.6rem; padding:1rem">
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:.75rem; align-items:start">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Name</label>
+        <input type="text" name="characters-__prefix__-name" maxlength="255">
+      </div>
+      <div style="display:flex; gap:.5rem; align-items:start">
+        <div class="form-group" style="margin-bottom:0; flex:1">
+          <label>Description</label>
+          <textarea name="characters-__prefix__-description" maxlength="2000" rows="2"></textarea>
+        </div>
+        <button type="button" class="remove-btn" onclick="removeRow(this)" title="Remove">✕</button>
+      </div>
+    </div>
+  </div>
+</template>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .remove-btn {
+    flex-shrink: 0; margin-top: 1.6rem;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 5px;
+    color: var(--muted); cursor: pointer; font-size: .8rem; transition: color .12s, border-color .12s, background .12s;
+  }
+  .remove-btn:hover { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if not editing %}
+<script>
+  const totalForms = document.getElementById('id_characters-TOTAL_FORMS');
+  const container  = document.getElementById('character-rows');
+  const hint       = document.getElementById('empty-hint');
+
+  function updateHint() {
+    hint.style.display = container.children.length === 0 ? 'block' : 'none';
+  }
+
+  function addCharacterRow() {
+    const idx  = parseInt(totalForms.value);
+    const html = document.getElementById('row-template').innerHTML.replace(/__prefix__/g, idx);
+    container.insertAdjacentHTML('beforeend', html);
+    totalForms.value = idx + 1;
+    updateHint();
+    container.lastElementChild.querySelector('input')?.focus();
+  }
+
+  function removeRow(btn) {
+    btn.closest('.char-row').remove();
+    totalForms.value = parseInt(totalForms.value) - 1;
+    container.querySelectorAll('.char-row').forEach((row, i) => {
+      row.querySelectorAll('input, textarea').forEach(el => {
+        if (el.name) el.name = el.name.replace(/characters-\d+-/, `characters-${i}-`);
+      });
+    });
+    updateHint();
+  }
+
+  updateHint();
+</script>
+{% endif %}
+{% endblock %}

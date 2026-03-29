@@ -1,0 +1,23 @@
+<div id="like-button">
+  {% if user.is_authenticated %}
+  <form hx-post="{% url 'series:series-like' series.uid %}"
+        hx-target="#like-button"
+        hx-swap="outerHTML"
+        style="display:inline">
+    {% csrf_token %}
+    <button type="submit"
+            class="btn btn-sm {% if is_liked %}btn-primary{% else %}btn-secondary{% endif %}"
+            style="gap:.5rem;{% if is_liked %}box-shadow:0 0 12px rgba(201,162,39,.4){% endif %}">
+      <span style="font-size:1rem">{% if is_liked %}♥{% else %}♡{% endif %}</span>
+      <span>{{ series.like_count }}</span>
+      <span style="font-size:.75rem; opacity:.7">{% if is_liked %}Liked{% else %}Like{% endif %}</span>
+    </button>
+  </form>
+  {% else %}
+  <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-secondary" style="gap:.5rem">
+    <span style="font-size:1rem">♡</span>
+    <span>{{ series.like_count }}</span>
+    <span style="font-size:.75rem; opacity:.7">Like</span>
+  </a>
+  {% endif %}
+</div>

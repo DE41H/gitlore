@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{{ chapter.name }} — {{ chapter.series.name }} — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Breadcrumb -->
+  <div style="font-size:.82rem; color:var(--muted); margin-bottom:1.75rem; display:flex; align-items:center; gap:.4rem; flex-wrap:wrap">
+    <a href="{% url 'series:series-detail' chapter.series.uid %}"
+       style="color:var(--muted2); transition:color .1s"
+       onmouseover="this.style.color='var(--accent-hover)'" onmouseout="this.style.color='var(--muted2)'">{{ chapter.series.name }}</a>
+    {% for ancestor in lineage reversed %}
+    <span style="color:var(--muted)">›</span>
+    <a href="{% url 'series:chapter-detail' chapter.series.uid ancestor.uid %}"
+       style="color:var(--muted2); transition:color .1s"
+       onmouseover="this.style.color='var(--accent-hover)'" onmouseout="this.style.color='var(--muted2)'">{{ ancestor.name }}</a>
+    {% endfor %}
+    <span style="color:var(--muted)">›</span>
+    <span>{{ chapter.name }}</span>
+  </div>
+
+  <div class="two-col">
+    <!-- Main -->
+    <div>
+      <div style="display:flex; align-items:flex-start; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap">
+        <h1 style="font-size:1.6rem; font-weight:800; letter-spacing:-.025em; flex:1; line-height:1.2">{{ chapter.name }}</h1>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-shrink:0">
+          <span id="canon-badge-{{ chapter.uid }}">{% include "series/partials/canon_badge.html" with chapter=chapter %}</span>
+
+          {% if chapter.status == 'pending' or chapter.status == 'generating' %}
+          <div id="status-poll"
+               hx-get="{% url 'series:chapter-status' chapter.series.uid chapter.uid %}"
+               hx-trigger="every 3s"
+               hx-swap="outerHTML">
+            {% include "series/partials/chapter_status.html" with chapter=chapter %}
+          </div>
+          {% else %}
+          {% include "series/partials/chapter_status.html" with chapter=chapter %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div id="chapter-content">
+        {% if chapter.status == 'done' and chapter.content %}
+        <div class="card" style="line-height:1.9; font-size:.975rem; white-space:pre-wrap; color:var(--text)">{{ chapter.content }}</div>
+        {% elif chapter.status == 'pending' or chapter.status == 'generating' %}
+        <div class="card" style="text-align:center; padding:4rem 2rem">
+          <div style="font-size:1.5rem; margin-bottom:.75rem; opacity:.4">✦</div>
+          <p style="font-size:1rem; color:var(--muted2); font-weight:600; margin-bottom:.4rem">AI is generating this chapter…</p>
+          <p style="font-size:.85rem; color:var(--muted)">This page updates automatically when done.</p>
+        </div>
+        {% elif chapter.status == 'failed' %}
+        <div class="card" style="text-align:center; padding:2.5rem 2rem">
+          <p style="color:var(--danger); font-weight:600; margin-bottom:.4rem">Generation failed</p>
+          <p style="font-size:.85rem; color:var(--muted)">The AI could not generate content for this chapter.</p>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if chapter.status == 'done' %}
+      <details style="margin-top:1rem">
+        <summary style="cursor:pointer; font-size:.82rem; color:var(--muted); user-select:none; padding:.4rem 0">View original prompt</summary>
+        <div class="card" style="margin-top:.5rem; font-size:.875rem; color:var(--muted); font-style:italic; line-height:1.65">{{ chapter.prompt }}</div>
+      </details>
+      {% endif %}
+    </div>
+
+    <!-- Sidebar -->
+    <aside>
+      {% if is_author %}
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div class="detail-card-label">Author Actions</div>
+        <div style="display:flex; flex-direction:column; gap:.5rem">
+          <a href="{% url 'series:chapter-create' chapter.series.uid %}?parent={{ chapter.uid }}" class="btn btn-secondary btn-sm">+ Add child chapter</a>
+          {% if chapter.status == 'done' %}
+          <form hx-post="{% url 'series:toggle-canon' chapter.series.uid chapter.uid %}"
+                hx-target="#canon-badge-{{ chapter.uid }}"
+                hx-swap="innerHTML">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm" style="width:100%">Toggle Canon</button>
+          </form>
+          {% endif %}
+          {% if not chapter.canon %}
+          <form method="post" action="{% url 'series:chapter-delete' chapter.series.uid chapter.uid %}"
+                onsubmit="return confirm('Delete this chapter?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm" style="width:100%">Delete Chapter</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if chapter.status == 'done' and user.is_authenticated and not is_author %}
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div class="detail-card-label">Fork the Story</div>
+        <p style="font-size:.82rem; color:var(--muted); margin-bottom:.85rem; line-height:1.55">Take the story in your own direction from this chapter.</p>
+        <form method="post" action="{% url 'series:start-spin-off' chapter.series.uid chapter.uid %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%">Start Spin-off</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if lineage %}
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div class="detail-card-label">Lineage</div>
+        <ul style="list-style:none; display:flex; flex-direction:column; gap:.4rem">
+          {% for ancestor in lineage reversed %}
+          <li style="font-size:.85rem">
+            <a href="{% url 'series:chapter-detail' chapter.series.uid ancestor.uid %}"
+               style="color:var(--muted2); transition:color .1s"
+               onmouseover="this.style.color='var(--accent-hover)'" onmouseout="this.style.color='var(--muted2)'">{{ ancestor.name }}</a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="detail-card">
+        <div class="detail-card-label">Spin-offs from here</div>
+        <div hx-get="{% url 'series:chapter-spinoffs' chapter.series.uid chapter.uid %}"
+             hx-trigger="revealed"
+             hx-swap="innerHTML">
+          <p style="font-size:.82rem; color:var(--muted)">Loading…</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if chapter.status == 'pending' or chapter.status == 'generating' %}
+<script>
+  // Auto-reload page when chapterComplete event fires (from HX-Trigger header in chapter_status_view)
+  document.body.addEventListener('chapterComplete', function() {
+    window.location.reload();
+  });
+</script>
+{% endif %}
+{% endblock %}

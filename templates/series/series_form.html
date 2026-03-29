@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Edit Series{% else %}New Series{% endif %} — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container-sm" style="max-width:680px">
+  <div class="page-header" style="margin-bottom:1.75rem">
+    <h1>{% if editing %}Edit Series{% else %}Create a New Series{% endif %}</h1>
+    {% if not editing %}<p>Everything can be changed later — get the basics in and start writing.</p>{% endif %}
+  </div>
+
+  <form method="post" id="series-form" novalidate>
+    {% csrf_token %}
+    {% if not editing %}{{ formset.management_form }}{% endif %}
+
+    <!-- Series info -->
+    <div class="form-section">
+      <div class="section-label">Series</div>
+
+      <div class="form-group">
+        <label for="id_name">Title <span style="color:var(--danger)">*</span></label>
+        {{ form.name }}
+        {% if form.name.errors %}<ul class="form-errors">{% for e in form.name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="id_synopsis">Synopsis</label>
+        {{ form.synopsis }}
+        {% if form.synopsis.errors %}<ul class="form-errors">{% for e in form.synopsis.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="id_visibility">Visibility</label>
+          {{ form.visibility }}
+          {% if form.visibility.errors %}<ul class="form-errors">{% for e in form.visibility.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label>Genres</label>
+          <div class="genre-checkboxes">
+            {% for checkbox in form.genres %}
+            <label class="genre-chip">
+              {{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          {% if form.genres.errors %}<ul class="form-errors">{% for e in form.genres.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- World -->
+    {% if form.world_description %}
+    <div class="form-section">
+      <div class="section-label">World / Setting</div>
+      <p class="section-hint">Describe the setting, rules, history, and atmosphere. The AI uses this as context when generating chapters.</p>
+      <div class="form-group" style="margin-bottom:0">
+        {{ form.world_description }}
+        {% if form.world_description.errors %}<ul class="form-errors">{% for e in form.world_description.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Characters (create only) -->
+    {% if not editing %}
+    <div class="form-section">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.35rem">
+        <div class="section-label" style="margin-bottom:0">
+          Characters <span style="font-size:.72rem; color:var(--muted); font-weight:400; text-transform:none; letter-spacing:0">(optional)</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addCharacterRow()">+ Add character</button>
+      </div>
+      <p class="section-hint" style="margin-bottom:1rem">Characters are used as AI context. You can add more anytime after creation.</p>
+
+      <div id="character-rows">
+        {% for char_form in formset %}
+        <div class="character-row">
+          <div style="display:grid; grid-template-columns:1fr 2fr; gap:.75rem; align-items:start">
+            <div class="form-group" style="margin-bottom:0">
+              <label>Name</label>
+              {{ char_form.name }}
+            </div>
+            <div style="display:flex; gap:.5rem; align-items:start">
+              <div class="form-group" style="margin-bottom:0; flex:1">
+                <label>Description</label>
+                {{ char_form.description }}
+              </div>
+              <button type="button" class="remove-btn" onclick="removeCharacterRow(this)" title="Remove">✕</button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div id="no-characters-hint" style="{% if formset.forms %}display:none{% endif %}; text-align:center; padding:1.5rem; border:1px dashed var(--border); border-radius:8px; color:var(--muted); font-size:.875rem">
+        No characters yet — you can add them now or after creation.
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div style="display:flex; gap:.75rem; align-items:center; padding-top:.25rem">
+      <button type="submit" class="btn btn-primary">
+        {% if editing %}Save Changes{% else %}Create Series{% endif %}
+      </button>
+      <a href="{% if editing %}{% url 'series:series-detail' series.uid %}{% else %}{% url 'series:my-series' %}{% endif %}" class="btn btn-ghost">Cancel</a>
+      {% if not editing %}
+      <span style="margin-left:auto; font-size:.78rem; color:var(--muted)">AI embeddings generate in the background</span>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% if not editing %}
+<template id="character-row-template">
+  <div class="character-row">
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:.75rem; align-items:start">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Name</label>
+        <input type="text" name="characters-__prefix__-name" maxlength="255">
+      </div>
+      <div style="display:flex; gap:.5rem; align-items:start">
+        <div class="form-group" style="margin-bottom:0; flex:1">
+          <label>Description</label>
+          <textarea name="characters-__prefix__-description" maxlength="2000" rows="2"></textarea>
+        </div>
+        <button type="button" class="remove-btn" onclick="removeCharacterRow(this)" title="Remove">✕</button>
+      </div>
+    </div>
+  </div>
+</template>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .genre-checkboxes { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.3rem; }
+
+  .genre-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .3rem .65rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; font-size: .8rem; color: var(--text);
+    cursor: pointer; transition: border-color .12s, background .12s;
+    user-select: none; text-transform: none; letter-spacing: 0; font-weight: 500;
+  }
+  .genre-chip input[type="checkbox"] { display: none; }
+  .genre-chip:has(input:checked) {
+    background: var(--accent-dim);
+    border-color: rgba(201,162,39,.45);
+    color: var(--accent-hover);
+  }
+
+  .character-row {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 9px; padding: .9rem 1rem; margin-bottom: .6rem;
+    animation: slideDown .15s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .remove-btn {
+    flex-shrink: 0; margin-top: 1.65rem;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 6px;
+    color: var(--muted); cursor: pointer; font-size: .8rem;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  .remove-btn:hover { color: var(--danger); border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.08); }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if not editing %}
+<script>
+  const totalForms = document.getElementById('id_characters-TOTAL_FORMS');
+  const container  = document.getElementById('character-rows');
+  const hint       = document.getElementById('no-characters-hint');
+
+  function updateHint() {
+    hint.style.display = container.children.length === 0 ? 'block' : 'none';
+  }
+
+  function addCharacterRow() {
+    const idx  = parseInt(totalForms.value);
+    const html = document.getElementById('character-row-template').innerHTML
+                   .replace(/__prefix__/g, idx);
+    container.insertAdjacentHTML('beforeend', html);
+    totalForms.value = idx + 1;
+    updateHint();
+    container.lastElementChild.querySelector('input')?.focus();
+  }
+
+  function removeCharacterRow(btn) {
+    btn.closest('.character-row').remove();
+    totalForms.value = parseInt(totalForms.value) - 1;
+    container.querySelectorAll('.character-row').forEach((row, i) => {
+      row.querySelectorAll('input, textarea').forEach(el => {
+        if (el.name) el.name = el.name.replace(/characters-\d+-/, `characters-${i}-`);
+        if (el.id)   el.id   = el.id.replace(/id_characters-\d+-/, `id_characters-${i}-`);
+      });
+    });
+    updateHint();
+  }
+
+  updateHint();
+</script>
+{% endif %}
+{% endblock %}

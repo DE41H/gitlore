@@ -1,0 +1,43 @@
+{% load series_tags %}
+<li>
+  <div class="chapter-node">
+    <div class="chapter-name">
+      <a href="{% url 'series:chapter-detail' series.uid chapter.uid %}"
+         style="color:var(--text); transition:color .1s"
+         onmouseover="this.style.color='var(--accent-hover)'"
+         onmouseout="this.style.color='var(--text)'">{{ chapter.name }}</a>
+    </div>
+    {% include "series/partials/chapter_status.html" with chapter=chapter %}
+    {% include "series/partials/canon_badge.html" with chapter=chapter %}
+    {% if is_author %}
+    <div class="chapter-actions">
+      {% if chapter.status == 'done' %}
+      <form hx-post="{% url 'series:toggle-canon' series.uid chapter.uid %}"
+            hx-target="#canon-badge-{{ chapter.uid }}"
+            hx-swap="outerHTML"
+            style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="icon-btn" title="Toggle canon" style="font-size:.75rem">{% if chapter.canon %}★{% else %}☆{% endif %}</button>
+      </form>
+      {% endif %}
+      <a href="{% url 'series:chapter-create' series.uid %}?parent={{ chapter.uid }}" class="icon-btn" title="Add child chapter" style="font-size:.85rem">+</a>
+      {% if not chapter.canon %}
+      <form method="post" action="{% url 'series:chapter-delete' series.uid chapter.uid %}" style="display:inline"
+            onsubmit="return confirm('Delete this chapter?')">
+        {% csrf_token %}
+        <button type="submit" class="icon-btn danger" title="Delete" style="font-size:.75rem">✕</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% with children=tree|get_children:chapter.pk %}
+  {% if children %}
+  <ul class="chapter-tree">
+    {% for child in children %}
+    {% include "series/partials/chapter_tree_node.html" with chapter=child series=series tree=tree is_author=is_author %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endwith %}
+</li>

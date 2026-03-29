@@ -1,0 +1,12 @@
+<div class="character-row" style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:1rem; margin-bottom:.75rem">
+  {% for field in form %}
+  <div class="form-group">
+    <label>{{ field.label }}</label>
+    {{ field }}
+    {% if field.errors %}
+    <ul class="form-errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {{ form.management_form }}
+</div>

@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% load series_tags %}
+{% block title %}{{ series.name }} — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <!-- Hero header -->
+  <div style="margin-bottom:2rem">
+    <div style="display:flex; align-items:flex-start; gap:1.5rem; margin-bottom:1.25rem">
+
+      <!-- Cover art -->
+      <div class="grad-{{ series.pk|modulo:6 }}"
+           style="width:120px; height:120px; border-radius:14px; flex-shrink:0;
+                  display:flex; align-items:center; justify-content:center;
+                  font-size:3rem; font-weight:900; color:rgba(255,255,255,.85); letter-spacing:-.04em">
+        {{ series.name|slice:":1"|upper }}
+      </div>
+
+      <div style="flex:1; min-width:0">
+        <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.3rem">
+          <span style="font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700">Series</span>
+          {% if series.visibility == 'private' %}<span class="badge badge-private">Private</span>{% endif %}
+        </div>
+        <h1 style="font-size:2rem; font-weight:900; letter-spacing:-.03em; line-height:1.1; margin-bottom:.5rem">{{ series.name }}</h1>
+        <p style="color:var(--muted2); font-size:.9rem; margin-bottom:.75rem">
+          by <strong style="color:var(--text)">{{ series.author.username }}</strong>
+          &nbsp;·&nbsp; {{ series.view_count }} view{{ series.view_count|pluralize }}
+        </p>
+
+        {% if series.genres.all %}
+        <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.85rem">
+          {% for genre in series.genres.all %}
+          <a href="{% url 'series:discover' %}?genre={{ genre.slug }}" class="genre-pill">{{ genre.name }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div style="display:flex; gap:.6rem; align-items:center; flex-wrap:wrap">
+          {% include "series/partials/like_button.html" with series=series is_liked=is_liked %}
+          {% if is_author %}
+          <div style="position:relative">
+            <button class="btn btn-secondary btn-sm" id="manage-btn"
+                    onclick="const m=document.getElementById('manage-menu');m.style.display=m.style.display==='block'?'none':'block'">
+              Manage ▾
+            </button>
+            <div id="manage-menu"
+                 style="display:none; position:absolute; left:0; top:calc(100% + 6px);
+                        background:var(--surface2); border:1px solid var(--border);
+                        border-radius:10px; padding:.4rem; min-width:170px; z-index:50;
+                        box-shadow:0 12px 40px rgba(0,0,0,.6)">
+              <a href="{% url 'series:series-edit' series.uid %}" class="menu-item">Edit metadata</a>
+              <a href="{% url 'series:world-edit' series.uid %}" class="menu-item">Edit world</a>
+              <a href="{% url 'series:character-add' series.uid %}" class="menu-item">Add characters</a>
+              <div style="border-top:1px solid var(--border); margin:.35rem 0"></div>
+              <form method="post" action="{% url 'series:series-delete' series.uid %}"
+                    onsubmit="return confirm('Delete this series and all its chapters? This cannot be undone.')">
+                {% csrf_token %}
+                <button type="submit" class="menu-item danger">Delete series</button>
+              </form>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- Main -->
+    <div>
+      {% if series.synopsis %}
+      <div class="card" style="margin-bottom:1.5rem">
+        <div style="font-size:.65rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:700; margin-bottom:.6rem">Synopsis</div>
+        <p style="line-height:1.8; color:var(--text); font-size:.925rem">{{ series.synopsis }}</p>
+      </div>
+      {% endif %}
+
+      <!-- Chapter graph -->
+      <div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem">
+          <h2 style="font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)">Chapters</h2>
+          <div style="display:flex; gap:.5rem; align-items:center">
+            <a href="{% url 'series:chapter-tree' series.uid %}" class="btn btn-ghost btn-sm" style="font-size:.78rem">Full tree ↗</a>
+            {% if is_author %}
+            <a href="{% url 'series:chapter-create' series.uid %}" class="btn btn-primary btn-sm">+ New chapter</a>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if tree %}
+        <div class="chapter-graph-wrap" id="graph-wrap-{{ series.uid }}">
+          <svg class="chapter-graph-svg" id="graph-svg-{{ series.uid }}"></svg>
+          <div class="chapter-graph" id="chapter-graph-{{ series.uid }}">
+            {% for parent_pk, chapter_list in tree.items %}
+              {% for chapter in chapter_list %}
+              <div class="graph-node"
+                   data-uid="{{ chapter.uid }}"
+                   data-pk="{{ chapter.pk }}"
+                   data-parent-pk="{{ parent_pk|default:'' }}"
+                   data-canon="{{ chapter.canon|yesno:'true,false' }}"
+                   data-status="{{ chapter.status }}">
+                <a href="{% url 'series:chapter-detail' series.uid chapter.uid %}"
+                   class="graph-node-link">{{ chapter.name }}</a>
+                <div class="graph-node-badges">
+                  {% include "series/partials/chapter_status.html" with chapter=chapter %}
+                  <span id="canon-badge-{{ chapter.uid }}">{% include "series/partials/canon_badge.html" with chapter=chapter %}</span>
+                </div>
+                {% if is_author %}
+                <div class="graph-node-actions">
+                  {% if chapter.status == 'done' %}
+                  <form hx-post="{% url 'series:toggle-canon' series.uid chapter.uid %}"
+                        hx-target="#canon-badge-{{ chapter.uid }}"
+                        hx-swap="innerHTML"
+                        style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="icon-btn" title="Toggle canon" style="font-size:.75rem">{% if chapter.canon %}★{% else %}☆{% endif %}</button>
+                  </form>
+                  {% endif %}
+                  <a href="{% url 'series:chapter-create' series.uid %}?parent={{ chapter.uid }}" class="icon-btn" title="Add child chapter" style="font-size:.85rem">+</a>
+                  {% if not chapter.canon %}
+                  <form method="post" action="{% url 'series:chapter-delete' series.uid chapter.uid %}" style="display:inline"
+                        onsubmit="return confirm('Delete this chapter?')">
+                    {% csrf_token %}
+                    <button type="submit" class="icon-btn danger" title="Delete" style="font-size:.75rem">✕</button>
+                  </form>
+                  {% endif %}
+                </div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding:3rem 1rem; border:1px dashed var(--border); border-radius:12px">
+          <div class="empty-icon">✦</div>
+          <h3>No chapters yet</h3>
+          {% if is_author %}
+          <p style="margin-top:.5rem"><a href="{% url 'series:chapter-create' series.uid %}" style="color:var(--accent-hover)">Write the opening chapter</a></p>
+          {% else %}
+          <p style="margin-top:.5rem">The author hasn't added any chapters yet.</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside>
+      {% if series.world.description %}
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.7rem">
+          <div class="detail-card-label" style="margin-bottom:0">World</div>
+          {% if is_author %}
+          <a href="{% url 'series:world-edit' series.uid %}" class="btn btn-ghost btn-sm" style="padding:.15rem .45rem; font-size:.75rem">Edit</a>
+          {% endif %}
+        </div>
+        <p style="font-size:.82rem; line-height:1.65; color:var(--muted)">{{ series.world.description|truncatewords:60 }}</p>
+      </div>
+      {% elif is_author %}
+      <div class="detail-card" style="margin-bottom:.85rem; border-style:dashed">
+        <div class="detail-card-label">World</div>
+        <p style="font-size:.82rem; color:var(--muted); margin-bottom:.75rem; line-height:1.55">No world description yet. Adding one helps the AI write consistent chapters.</p>
+        <a href="{% url 'series:world-edit' series.uid %}" class="btn btn-secondary btn-sm">Add world</a>
+      </div>
+      {% endif %}
+
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem">
+          <div class="detail-card-label" style="margin-bottom:0">Characters</div>
+          {% if is_author %}
+          <a href="{% url 'series:character-add' series.uid %}" class="btn btn-ghost btn-sm" style="padding:.15rem .45rem; font-size:.75rem">+ Add</a>
+          {% endif %}
+        </div>
+        {% if series.characters.all %}
+        <ul style="list-style:none; display:flex; flex-direction:column; gap:.85rem">
+          {% for character in series.characters.all %}
+          <li>
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:.4rem">
+              <strong style="font-size:.875rem; line-height:1.3">{{ character.name }}</strong>
+              {% if is_author %}
+              <div style="display:flex; gap:.15rem; flex-shrink:0">
+                <a href="{% url 'series:character-edit' series.uid character.id %}" class="icon-btn" title="Edit">✎</a>
+                <form method="post" action="{% url 'series:character-delete' series.uid character.id %}" style="display:inline"
+                      onsubmit="return confirm('Delete {{ character.name }}?')">
+                  {% csrf_token %}
+                  <button type="submit" class="icon-btn danger" title="Delete">✕</button>
+                </form>
+              </div>
+              {% endif %}
+            </div>
+            {% if character.description %}
+            <p style="font-size:.78rem; color:var(--muted); margin-top:.2rem; line-height:1.5">{{ character.description|truncatewords:12 }}</p>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="font-size:.82rem; color:var(--muted)">
+          No characters yet.{% if is_author %} <a href="{% url 'series:character-add' series.uid %}" style="color:var(--accent-hover)">Add some</a>{% endif %}
+        </p>
+        {% endif %}
+      </div>
+
+      {% if series.spin_off %}
+      <div class="detail-card" style="margin-bottom:.85rem">
+        <div class="detail-card-label">Forked from</div>
+        <a href="{% url 'series:series-detail' series.spin_off.uid %}" style="font-size:.875rem; color:var(--accent-hover)">{{ series.spin_off.name }}</a>
+      </div>
+      {% endif %}
+
+      <div class="detail-card">
+        <div class="detail-card-label">Stats</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem">
+          <div style="display:flex; flex-direction:column; gap:.1rem">
+            <span style="font-size:1.25rem; font-weight:800">{{ series.view_count }}</span>
+            <span style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em">views</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:.1rem">
+            <span id="stat-likes" style="font-size:1.25rem; font-weight:800">{{ series.like_count }}</span>
+            <span style="font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em">likes</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .menu-item {
+    display: block; padding: .48rem .75rem;
+    font-size: .85rem; color: var(--text);
+    border-radius: 6px; transition: background .1s;
+    cursor: pointer; border: none; background: none;
+    text-decoration: none; white-space: nowrap; width: 100%; text-align: left;
+    font-family: inherit;
+  }
+  .menu-item:hover { background: var(--surface3); color: var(--text); }
+  .menu-item.danger { color: var(--danger); }
+  .menu-item.danger:hover { background: rgba(239,68,68,.1); }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Close manage menu on outside click
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('manage-menu');
+    var btn  = document.getElementById('manage-btn');
+    if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
+
+  // Chapter graph
+  (function buildGraph(graphId, svgId) {
+    var container = document.getElementById(graphId);
+    var svgEl = document.getElementById(svgId);
+    if (!container || !svgEl) return;
+
+    var nodes = Array.from(container.querySelectorAll('.graph-node'));
+    if (!nodes.length) return;
+
+    var COL_W = 220, ROW_H = 110, NODE_W = 192, NODE_H = 80;
+    var pos = {};
+    var children = {};
+
+    nodes.forEach(function(el) {
+      var p = el.dataset.parentPk || '__root__';
+      if (!children[p]) children[p] = [];
+      children[p].push(el);
+    });
+
+    function layout(pk, col, row) {
+      pos[pk] = { col: col, row: row };
+      var kids = children[pk] || [];
+      var canonKid = null;
+      var branches = [];
+      kids.forEach(function(k) {
+        if (k.dataset.canon === 'true' && !canonKid) canonKid = k;
+        else branches.push(k);
+      });
+      if (canonKid) layout(canonKid.dataset.pk, col, row + 1);
+      branches.forEach(function(k, i) {
+        var side = (i % 2 === 0) ? 1 : -1;
+        var dist = Math.ceil((i + 1) / 2);
+        layout(k.dataset.pk, col + side * dist, row + 1);
+      });
+    }
+
+    var roots = children['__root__'] || [];
+    roots.forEach(function(r, i) { layout(r.dataset.pk, i * 2, 0); });
+
+    // Compute bounds
+    var allCols = Object.values(pos).map(function(p) { return p.col; });
+    var allRows = Object.values(pos).map(function(p) { return p.row; });
+    var minCol = Math.min.apply(null, allCols);
+    var maxCol = Math.max.apply(null, allCols);
+    var maxRow = Math.max.apply(null, allRows);
+
+    var totalW = (maxCol - minCol + 1) * COL_W;
+    var totalH = (maxRow + 1) * ROW_H + NODE_H + 20;
+    var containerW = container.offsetWidth || 600;
+    var offsetX = Math.max(0, (containerW - totalW) / 2) + (-minCol * COL_W);
+
+    container.style.height = totalH + 'px';
+    svgEl.setAttribute('width', Math.max(containerW, totalW + Math.abs(minCol) * COL_W + COL_W));
+    svgEl.setAttribute('height', totalH);
+    svgEl.style.width = Math.max(containerW, totalW + Math.abs(minCol) * COL_W + COL_W) + 'px';
+    svgEl.style.height = totalH + 'px';
+
+    var centers = {};
+    nodes.forEach(function(el) {
+      var p = pos[el.dataset.pk];
+      if (!p) return;
+      var x = p.col * COL_W + offsetX;
+      var y = p.row * ROW_H;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      centers[el.dataset.pk] = {
+        x: x + NODE_W / 2,
+        y: y + NODE_H / 2
+      };
+    });
+
+    // Draw SVG edges
+    nodes.forEach(function(el) {
+      var parentPk = el.dataset.parentPk;
+      if (!parentPk || !centers[parentPk] || !centers[el.dataset.pk]) return;
+      var from = centers[parentPk];
+      var to = centers[el.dataset.pk];
+      var isCanon = el.dataset.canon === 'true';
+      var mid = (from.y + to.y) / 2;
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d',
+        'M' + from.x + ',' + from.y +
+        ' C' + from.x + ',' + mid +
+        ' ' + to.x + ',' + mid +
+        ' ' + to.x + ',' + to.y
+      );
+      path.setAttribute('stroke', isCanon ? '#C9A227' : '#3a3a3a');
+      path.setAttribute('stroke-width', isCanon ? '2' : '1.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', isCanon ? '0.8' : '0.6');
+      if (!isCanon) path.setAttribute('stroke-dasharray', '5,3');
+      svgEl.appendChild(path);
+    });
+  })(
+    'chapter-graph-{{ series.uid }}',
+    'graph-svg-{{ series.uid }}'
+  );
+</script>
+{% endblock %}

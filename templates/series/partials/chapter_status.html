@@ -1,0 +1,9 @@
+{% if chapter.status == 'pending' %}
+<span class="badge badge-pending">⏳ Pending</span>
+{% elif chapter.status == 'generating' %}
+<span class="badge badge-generating">✦ Generating</span>
+{% elif chapter.status == 'done' %}
+<span class="badge badge-done">✓ Done</span>
+{% elif chapter.status == 'failed' %}
+<span class="badge badge-failed">✗ Failed</span>
+{% endif %}

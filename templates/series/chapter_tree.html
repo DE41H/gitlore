@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load series_tags %}
+{% block title %}{{ series.name }} — Chapter Tree — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap">
+      <div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:.2rem">
+          <a href="{% url 'series:series-detail' series.uid %}" style="color:var(--accent-hover)">← {{ series.name }}</a>
+        </p>
+        <h1>Chapter Tree</h1>
+      </div>
+      {% if is_author %}
+      <a href="{% url 'series:chapter-create' series.uid %}" class="btn btn-primary" style="margin-left:auto">+ Add Chapter</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex; gap:1.5rem; align-items:center; margin-bottom:1.25rem; font-size:.8rem; color:var(--muted)">
+    <div style="display:flex; align-items:center; gap:.5rem">
+      <div style="width:32px; height:2px; background:var(--accent); border-radius:1px"></div>
+      <span>Canon path</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:.5rem">
+      <div style="width:32px; height:1.5px; background:#3a3a3a; border-radius:1px; border-top: 1.5px dashed #3a3a3a; margin-top: -1px"></div>
+      <span>Non-canon branch</span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:1.5rem; overflow:hidden">
+    {% if tree %}
+    <div class="chapter-graph-wrap" id="graph-wrap-tree">
+      <svg class="chapter-graph-svg" id="graph-svg-tree"></svg>
+      <div class="chapter-graph" id="chapter-graph-tree">
+        {% for parent_pk, chapter_list in tree.items %}
+          {% for chapter in chapter_list %}
+          <div class="graph-node"
+               data-uid="{{ chapter.uid }}"
+               data-pk="{{ chapter.pk }}"
+               data-parent-pk="{{ parent_pk|default:'' }}"
+               data-canon="{{ chapter.canon|yesno:'true,false' }}"
+               data-status="{{ chapter.status }}">
+            <a href="{% url 'series:chapter-detail' series.uid chapter.uid %}"
+               class="graph-node-link">{{ chapter.name }}</a>
+            <div class="graph-node-badges">
+              {% include "series/partials/chapter_status.html" with chapter=chapter %}
+              <span id="canon-badge-{{ chapter.uid }}">{% include "series/partials/canon_badge.html" with chapter=chapter %}</span>
+            </div>
+            {% if is_author %}
+            <div class="graph-node-actions">
+              {% if chapter.status == 'done' %}
+              <form hx-post="{% url 'series:toggle-canon' series.uid chapter.uid %}"
+                    hx-target="#canon-badge-{{ chapter.uid }}"
+                    hx-swap="innerHTML"
+                    style="display:inline">
+                {% csrf_token %}
+                <button type="submit" class="icon-btn" title="Toggle canon" style="font-size:.75rem">{% if chapter.canon %}★{% else %}☆{% endif %}</button>
+              </form>
+              {% endif %}
+              <a href="{% url 'series:chapter-create' series.uid %}?parent={{ chapter.uid }}" class="icon-btn" title="Add child chapter" style="font-size:.85rem">+</a>
+              {% if not chapter.canon %}
+              <form method="post" action="{% url 'series:chapter-delete' series.uid chapter.uid %}" style="display:inline"
+                    onsubmit="return confirm('Delete this chapter?')">
+                {% csrf_token %}
+                <button type="submit" class="icon-btn danger" title="Delete" style="font-size:.75rem">✕</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">✦</div>
+      <h3>No chapters yet</h3>
+      {% if is_author %}<p><a href="{% url 'series:chapter-create' series.uid %}" style="color:var(--accent-hover)">Write the first chapter</a></p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  (function buildGraph(graphId, svgId) {
+    var container = document.getElementById(graphId);
+    var svgEl = document.getElementById(svgId);
+    if (!container || !svgEl) return;
+
+    var nodes = Array.from(container.querySelectorAll('.graph-node'));
+    if (!nodes.length) return;
+
+    var COL_W = 230, ROW_H = 120, NODE_W = 192, NODE_H = 85;
+    var pos = {};
+    var children = {};
+
+    nodes.forEach(function(el) {
+      var p = el.dataset.parentPk || '__root__';
+      if (!children[p]) children[p] = [];
+      children[p].push(el);
+    });
+
+    function layout(pk, col, row) {
+      pos[pk] = { col: col, row: row };
+      var kids = children[pk] || [];
+      var canonKid = null;
+      var branches = [];
+      kids.forEach(function(k) {
+        if (k.dataset.canon === 'true' && !canonKid) canonKid = k;
+        else branches.push(k);
+      });
+      if (canonKid) layout(canonKid.dataset.pk, col, row + 1);
+      branches.forEach(function(k, i) {
+        var side = (i % 2 === 0) ? 1 : -1;
+        var dist = Math.ceil((i + 1) / 2);
+        layout(k.dataset.pk, col + side * dist, row + 1);
+      });
+    }
+
+    var roots = children['__root__'] || [];
+    roots.forEach(function(r, i) { layout(r.dataset.pk, i * 2, 0); });
+
+    var allCols = Object.values(pos).map(function(p) { return p.col; });
+    var allRows = Object.values(pos).map(function(p) { return p.row; });
+    var minCol = Math.min.apply(null, allCols);
+    var maxCol = Math.max.apply(null, allCols);
+    var maxRow = Math.max.apply(null, allRows);
+
+    var totalW = (maxCol - minCol + 1) * COL_W;
+    var totalH = (maxRow + 1) * ROW_H + NODE_H + 24;
+    var containerW = container.offsetWidth || 800;
+    var svgW = Math.max(containerW, totalW + 2 * COL_W);
+    var offsetX = Math.max(COL_W, (containerW - totalW) / 2) + (-minCol * COL_W);
+
+    container.style.height = totalH + 'px';
+    svgEl.setAttribute('width', svgW);
+    svgEl.setAttribute('height', totalH);
+    svgEl.style.width = svgW + 'px';
+    svgEl.style.height = totalH + 'px';
+
+    var centers = {};
+    nodes.forEach(function(el) {
+      var p = pos[el.dataset.pk];
+      if (!p) return;
+      var x = p.col * COL_W + offsetX;
+      var y = p.row * ROW_H;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      centers[el.dataset.pk] = {
+        x: x + NODE_W / 2,
+        y: y + NODE_H / 2
+      };
+    });
+
+    nodes.forEach(function(el) {
+      var parentPk = el.dataset.parentPk;
+      if (!parentPk || !centers[parentPk] || !centers[el.dataset.pk]) return;
+      var from = centers[parentPk];
+      var to = centers[el.dataset.pk];
+      var isCanon = el.dataset.canon === 'true';
+      var mid = (from.y + to.y) / 2;
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d',
+        'M' + from.x + ',' + from.y +
+        ' C' + from.x + ',' + mid +
+        ' ' + to.x + ',' + mid +
+        ' ' + to.x + ',' + to.y
+      );
+      path.setAttribute('stroke', isCanon ? '#C9A227' : '#3a3a3a');
+      path.setAttribute('stroke-width', isCanon ? '2.5' : '1.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', isCanon ? '0.9' : '0.55');
+      if (!isCanon) path.setAttribute('stroke-dasharray', '5,3');
+      svgEl.appendChild(path);
+    });
+  })('chapter-graph-tree', 'graph-svg-tree');
+</script>
+{% endblock %}

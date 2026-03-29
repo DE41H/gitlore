@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Account Settings — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container-sm" style="max-width:560px">
+  <div class="page-header">
+    <h1>Account Settings</h1>
+    <p>Manage your profile and security</p>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem">
+    <div style="font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:700; margin-bottom:1.25rem">Profile</div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update_profile">
+
+      <div class="form-group">
+        <label for="id_username">Username</label>
+        {{ profile_form.username }}
+        {% if profile_form.username.errors %}
+        <ul class="form-errors">{% for e in profile_form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="id_email">Email</label>
+        {{ profile_form.email }}
+        {% if profile_form.email.errors %}
+        <ul class="form-errors">{% for e in profile_form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:1.25rem">
+        <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div style="font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:700; margin-bottom:1.25rem">Change Password</div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="change_password">
+
+      <div class="form-group">
+        <label>Current Password</label>
+        {{ password_form.old_password }}
+        {% if password_form.old_password.errors %}
+        <ul class="form-errors">{% for e in password_form.old_password.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label>New Password</label>
+        {{ password_form.new_password1 }}
+        {% if password_form.new_password1.errors %}
+        <ul class="form-errors">{% for e in password_form.new_password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label>Confirm New Password</label>
+        {{ password_form.new_password2 }}
+        {% if password_form.new_password2.errors %}
+        <ul class="form-errors">{% for e in password_form.new_password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:1.25rem">
+        <button type="submit" class="btn btn-primary btn-sm">Change Password</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

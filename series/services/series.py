@@ -4,13 +4,12 @@ from series.models import Genre, Series, SeriesVisibility
 
 
 def get_public_series(author_id: int | None = None):
-    qs = (
-        Series.objects.select_related("author")
-        .prefetch_related("genres")
-        .filter(visibility=SeriesVisibility.PUBLIC, author_id=author_id)
-        .order_by("-created_at")
+    qs = Series.objects.select_related("author").prefetch_related("genres").filter(
+        visibility=SeriesVisibility.PUBLIC
     )
-    return qs
+    if author_id is not None:
+        qs = qs.filter(author_id=author_id)
+    return qs.order_by("-created_at")
 
 
 def get_user_series(user_id: int):

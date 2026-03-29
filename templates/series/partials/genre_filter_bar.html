@@ -1,0 +1,14 @@
+<div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.75rem" id="genre-filter-bar">
+  <a href="{% url 'series:discover' %}"
+     hx-get="{% url 'series:discover' %}"
+     hx-target="#series-grid"
+     hx-push-url="true"
+     class="genre-pill {% if not active_genre %}active{% endif %}">All</a>
+  {% for genre in genres %}
+  <a href="{% url 'series:discover' %}?genre={{ genre.slug }}"
+     hx-get="{% url 'series:discover' %}?genre={{ genre.slug }}"
+     hx-target="#series-grid"
+     hx-push-url="true"
+     class="genre-pill {% if active_genre == genre.slug %}active{% endif %}">{{ genre.name }}</a>
+  {% endfor %}
+</div>

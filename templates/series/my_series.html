@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}My Series — GITLORE{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem">
+    <div>
+      <h1>My Series</h1>
+      <p>Your stories — public and private</p>
+    </div>
+    <a href="{% url 'series:series-create' %}" class="btn btn-primary" style="flex-shrink:0">+ New Series</a>
+  </div>
+
+  <div class="series-grid">
+    {% for series in series_list %}
+      {% include "series/partials/series_card.html" with series=series %}
+    {% empty %}
+    <div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">✦</div>
+      <h3>No series yet</h3>
+      <p><a href="{% url 'series:series-create' %}" style="color:var(--accent-hover)">Create your first series</a></p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

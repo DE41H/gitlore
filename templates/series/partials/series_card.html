@@ -1,0 +1,23 @@
+{% load series_tags %}
+<a href="{% url 'series:series-detail' series.uid %}" class="series-card">
+  <div class="series-card-cover grad-{{ series.pk|modulo:6 }}">
+    {{ series.name|slice:":1"|upper }}
+  </div>
+  <div class="series-card-body">
+    <div class="series-card-title" title="{{ series.name }}">{{ series.name }}</div>
+    {% if series.synopsis %}
+    <p style="font-size:.78rem; color:var(--muted); line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical">{{ series.synopsis }}</p>
+    {% endif %}
+    {% if series.genres.all %}
+    <div style="display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.2rem">
+      {% for genre in series.genres.all|slice:":3" %}
+      <span style="font-size:.68rem; padding:.1rem .45rem; background:var(--surface3); border:1px solid var(--border); border-radius:4px; color:var(--muted)">{{ genre.name }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="series-card-stats">
+      <span>by {{ series.author.username }}</span>
+      <span style="margin-left:auto">{{ series.like_count }} likes</span>
+    </div>
+  </div>
+</a>

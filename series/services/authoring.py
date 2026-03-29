@@ -25,16 +25,28 @@ def create_series(
     visibility: str,
     world_description: str,
     genre_ids: list[int],
+    characters: list[dict] | None = None,
 ) -> int:
-    world = World.objects.create(description=world_description)
+    world = World.objects.create(description="")
     series = Series.objects.create(
-        author=author_id,
+        author_id=author_id,
         name=name,
         synopsis=synopsis,
         visibility=visibility,
         world=world,
     )
     series.genres.set(genre_ids)
+    World.objects.filter(pk=world.pk).update(description=world_description)
+    if characters:
+        Character.objects.bulk_create(
+            [
+                Character(
+                    name=c["name"], description=c["description"], series_id=series.pk
+                )
+                for c in characters
+                if c.get("name", "").strip()
+            ]
+        )
     return series.pk
 
 
@@ -65,7 +77,8 @@ def add_characters(
     if series.author_id != user_id:  # pyright: ignore[reportAttributeAccessIssue]
         raise PermissionError
     characters = [
-        Character(name=n, description=d) for n, d in zip(name_list, description_list)
+        Character(name=n, description=d, series_id=series_id)
+        for n, d in zip(name_list, description_list)
     ]
     return Character.objects.bulk_create(characters)
 
@@ -136,10 +149,10 @@ def replicate(
         name=source.name,
         synopsis=source.synopsis,
         visibility=source.visibility,
-        author=author_id,
+        author_id=author_id,
         world=world,
-        spin_off=series_id if spin_off_chapter_id is not None else None,
-        spin_off_chapter=spin_off_chapter_id
+        spin_off_id=series_id if spin_off_chapter_id is not None else None,
+        spin_off_chapter_id=spin_off_chapter_id
         if spin_off_chapter_id is not None
         else None,
     )

@@ -1,0 +1,12 @@
+{% if spinoffs %}
+<ul style="list-style:none; display:flex; flex-direction:column; gap:.5rem">
+  {% for s in spinoffs %}
+  <li>
+    <a href="{% url 'series:series-detail' s.uid %}" style="font-size:.875rem; color:var(--accent-hover)">{{ s.name }}</a>
+    <span style="font-size:.78rem; color:var(--muted)"> — by {{ s.author.username }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p style="color:var(--muted); font-size:.82rem">No spin-offs yet.</p>
+{% endif %}
