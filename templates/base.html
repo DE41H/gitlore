@@ -455,6 +455,31 @@
     .chapter-node .chapter-actions { display: flex; gap: .2rem; opacity: 0; transition: opacity .15s; }
     .chapter-node:hover .chapter-actions { opacity: 1; }
 
+    /* ── Toasts ───────────────────────────────────────── */
+    #toast-container {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      z-index: 1000; display: flex; flex-direction: column-reverse; gap: .45rem;
+      align-items: center; pointer-events: none;
+    }
+    .toast {
+      padding: .6rem 1.2rem; border-radius: 8px; font-size: .875rem; font-weight: 500;
+      pointer-events: auto; white-space: nowrap; max-width: 90vw;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5);
+      animation: toastIn .2s ease;
+    }
+    .toast-error   { background: rgba(220,40,40,.95); color: #fff; }
+    .toast-success { background: rgba(201,162,39,.95); color: #000; }
+    .toast-info    { background: var(--surface3); color: var(--text); border: 1px solid var(--border); }
+    @keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ── Inline errors (from HTMX partial responses) ── */
+    .inline-error {
+      font-size: .8rem; color: var(--danger);
+      padding: .2rem .5rem; border-radius: 5px;
+      background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25);
+      display: inline-block;
+    }
+
     /* ── Misc ─────────────────────────────────────────── */
     .htmx-indicator { opacity: 0; transition: opacity .2s; }
     .htmx-request .htmx-indicator { opacity: 1; }
@@ -622,10 +647,42 @@
     </div>
   </div>
 
+  <!-- Toast container (fixed bottom-center) -->
+  <div id="toast-container"></div>
+
 </div>
 {% endblock %}
 
 <script>
+  /* ── Toast system ───────────────────────────────── */
+  function showToast(msg, type) {
+    var c = document.getElementById('toast-container');
+    if (!c) return;
+    var t = document.createElement('div');
+    t.className = 'toast toast-' + (type || 'error');
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(function() {
+      t.style.opacity = '0';
+      t.style.transition = 'opacity .2s';
+      setTimeout(function() { t.remove(); }, 200);
+    }, 4000);
+  }
+
+  /* ── HTMX error handlers ────────────────────────── */
+  document.addEventListener('htmx:responseError', function(evt) {
+    var status = evt.detail.xhr && evt.detail.xhr.status;
+    if (status === 403) showToast("You don't have permission to do that.", 'error');
+    else if (status === 404) showToast('Resource not found.', 'error');
+    else if (status === 405) showToast('Action not allowed.', 'error');
+    else showToast('Something went wrong (' + (status || '?') + '). Please try again.', 'error');
+  });
+
+  document.addEventListener('htmx:sendError', function() {
+    showToast('Network error. Please check your connection.', 'error');
+  });
+
+  /* ── Hamburger menu ─────────────────────────────── */
   (function () {
     var btn = document.getElementById('hamburger-btn');
     var nav = document.getElementById('mobile-nav');
@@ -645,6 +702,7 @@
     });
   })();
 </script>
+
 
 {% block extra_scripts %}{% endblock %}
 </body>

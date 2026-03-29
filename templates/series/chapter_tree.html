@@ -2,6 +2,19 @@
 {% load series_tags %}
 {% block title %}{{ series.name }} — Chapter Tree — GITLORE{% endblock %}
 
+{% block extra_head %}
+<style>
+  .graph-node[data-draggable="true"] { cursor: grab; }
+  .graph-node[data-draggable="true"]:active { cursor: grabbing; }
+  .graph-node.drag-over {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--accent-dim), 0 4px 24px rgba(201,162,39,.35) !important;
+    transform: translateY(-2px);
+  }
+  .graph-node.dragging { opacity: 0.35; pointer-events: none; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
   <div class="page-header">
@@ -19,15 +32,21 @@
   </div>
 
   <!-- Legend -->
-  <div style="display:flex; gap:1.5rem; align-items:center; margin-bottom:1.25rem; font-size:.8rem; color:var(--muted)">
+  <div style="display:flex; gap:1.5rem; align-items:center; margin-bottom:1.25rem; font-size:.8rem; color:var(--muted); flex-wrap:wrap">
     <div style="display:flex; align-items:center; gap:.5rem">
       <div style="width:32px; height:2px; background:var(--accent); border-radius:1px"></div>
       <span>Canon path</span>
     </div>
     <div style="display:flex; align-items:center; gap:.5rem">
-      <div style="width:32px; height:1.5px; background:#3a3a3a; border-radius:1px; border-top: 1.5px dashed #3a3a3a; margin-top: -1px"></div>
+      <div style="width:32px; border-top:1.5px dashed #3a3a3a"></div>
       <span>Non-canon branch</span>
     </div>
+    {% if is_author %}
+    <div style="display:flex; align-items:center; gap:.5rem">
+      <span style="font-size:.95rem; opacity:.7">⠿</span>
+      <span>Drag non-canon to reparent</span>
+    </div>
+    {% endif %}
   </div>
 
   <div class="card" style="padding:1.5rem; overflow:hidden">
@@ -42,7 +61,11 @@
                data-pk="{{ chapter.pk }}"
                data-parent-pk="{{ parent_pk|default:'' }}"
                data-canon="{{ chapter.canon|yesno:'true,false' }}"
-               data-status="{{ chapter.status }}">
+               data-status="{{ chapter.status }}"
+               {% if is_author and not chapter.canon %}data-reparent-url="{% url 'series:reparent-chapter' series.uid chapter.uid %}" data-draggable="true"{% endif %}>
+            {% if is_author and not chapter.canon %}
+            <div style="position:absolute; top:.4rem; right:.4rem; font-size:.9rem; color:var(--muted); opacity:.4; cursor:grab" title="Drag to reparent">⠿</div>
+            {% endif %}
             <a href="{% url 'series:chapter-detail' series.uid chapter.uid %}"
                class="graph-node-link">{{ chapter.name }}</a>
             <div class="graph-node-badges">
@@ -88,6 +111,8 @@
 
 {% block extra_scripts %}
 <script>
+  var CSRF = '{{ csrf_token }}';
+
   (function buildGraph(graphId, svgId) {
     var container = document.getElementById(graphId);
     var svgEl = document.getElementById(svgId);
@@ -152,10 +177,7 @@
       var y = p.row * ROW_H;
       el.style.left = x + 'px';
       el.style.top = y + 'px';
-      centers[el.dataset.pk] = {
-        x: x + NODE_W / 2,
-        y: y + NODE_H / 2
-      };
+      centers[el.dataset.pk] = { x: x + NODE_W / 2, y: y + NODE_H / 2 };
     });
 
     nodes.forEach(function(el) {
@@ -179,6 +201,71 @@
       if (!isCanon) path.setAttribute('stroke-dasharray', '5,3');
       svgEl.appendChild(path);
     });
+
+    /* ── Drag-and-drop reparenting ─────────────────── */
+    var dragging = null;
+
+    nodes.forEach(function(el) {
+      if (!el.dataset.reparentUrl) return;
+
+      el.setAttribute('draggable', 'true');
+
+      el.addEventListener('dragstart', function(e) {
+        dragging = el;
+        setTimeout(function() { el.classList.add('dragging'); }, 0);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', el.dataset.uid);
+      });
+
+      el.addEventListener('dragend', function() {
+        el.classList.remove('dragging');
+        dragging = null;
+      });
+    });
+
+    nodes.forEach(function(el) {
+      el.addEventListener('dragover', function(e) {
+        if (!dragging || dragging === el) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.classList.add('drag-over');
+      });
+
+      el.addEventListener('dragleave', function(e) {
+        if (!el.contains(e.relatedTarget)) {
+          el.classList.remove('drag-over');
+        }
+      });
+
+      el.addEventListener('drop', function(e) {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        if (!dragging || dragging === el) return;
+
+        var reparentUrl = dragging.dataset.reparentUrl;
+        var newParentUid = el.dataset.uid;
+        if (!reparentUrl || !newParentUid) return;
+
+        var savedOpacity = dragging.style.opacity;
+        dragging.style.opacity = '0.3';
+
+        fetch(reparentUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': CSRF
+          },
+          body: 'new_parent_uid=' + encodeURIComponent(newParentUid),
+          redirect: 'follow'
+        })
+        .then(function() { window.location.reload(); })
+        .catch(function() {
+          dragging.style.opacity = savedOpacity;
+          showToast('Network error — could not move chapter.', 'error');
+        });
+      });
+    });
+
   })('chapter-graph-tree', 'graph-svg-tree');
 </script>
 {% endblock %}

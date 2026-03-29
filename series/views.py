@@ -240,7 +240,10 @@ def series_edit_view(request, series_uid):
                 synopsis=d.get("synopsis", ""),
                 visibility=d["visibility"],
                 genre_ids=[g.pk for g in d.get("genres", [])],
-            )
+            )ads with new structure
+             3. Canon chapters: Verify that canon chapters have no
+             drag handle and cannot be dragged
+             4. Error path: Drop a chapter onto itself → nothing
             messages.success(request, "Series updated.")
             return redirect("series:series-detail", series_uid=series.uid)
     else:
@@ -602,7 +605,7 @@ def character_delete_view(request, series_uid, character_id):
 def world_edit_view(request, series_uid):
     # Only fetch series + world — no genres/characters prefetch needed
     series = get_object_or_404(
-        Series.objects.select_related("world").only("pk", "uid", "author_id", "name"),
+        Series.objects.select_related("world").only("pk", "uid", "author_id", "name", "world"),
         uid=series_uid,
     )
     if series.author_id != request.user.pk:

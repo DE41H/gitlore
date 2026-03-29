@@ -99,7 +99,11 @@
                    data-pk="{{ chapter.pk }}"
                    data-parent-pk="{{ parent_pk|default:'' }}"
                    data-canon="{{ chapter.canon|yesno:'true,false' }}"
-                   data-status="{{ chapter.status }}">
+                   data-status="{{ chapter.status }}"
+                   {% if is_author and not chapter.canon %}data-reparent-url="{% url 'series:reparent-chapter' series.uid chapter.uid %}" data-draggable="true"{% endif %}>
+                {% if is_author and not chapter.canon %}
+                <div style="position:absolute; top:.4rem; right:.4rem; font-size:.9rem; color:var(--muted); opacity:.4; cursor:grab" title="Drag to reparent">⠿</div>
+                {% endif %}
                 <a href="{% url 'series:chapter-detail' series.uid chapter.uid %}"
                    class="graph-node-link">{{ chapter.name }}</a>
                 <div class="graph-node-badges">
@@ -230,6 +234,14 @@
 
 {% block extra_head %}
 <style>
+  .graph-node[data-draggable="true"] { cursor: grab; }
+  .graph-node[data-draggable="true"]:active { cursor: grabbing; }
+  .graph-node.drag-over {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--accent-dim), 0 4px 24px rgba(201,162,39,.35) !important;
+    transform: translateY(-2px);
+  }
+  .graph-node.dragging { opacity: 0.35; pointer-events: none; }
   .menu-item {
     display: block; padding: .48rem .75rem;
     font-size: .85rem; color: var(--text);
@@ -246,6 +258,8 @@
 
 {% block extra_scripts %}
 <script>
+  var CSRF = '{{ csrf_token }}';
+
   // Close manage menu on outside click
   document.addEventListener('click', function(e) {
     var menu = document.getElementById('manage-menu');
@@ -352,5 +366,68 @@
     'chapter-graph-{{ series.uid }}',
     'graph-svg-{{ series.uid }}'
   );
+
+  /* ── Drag-and-drop reparenting ─────────────────── */
+  (function setupDragDrop() {
+    var container = document.getElementById('chapter-graph-{{ series.uid }}');
+    if (!container) return;
+    var nodes = Array.from(container.querySelectorAll('.graph-node'));
+    var dragging = null;
+
+    nodes.forEach(function(el) {
+      if (!el.dataset.reparentUrl) return;
+      el.setAttribute('draggable', 'true');
+      el.addEventListener('dragstart', function(e) {
+        dragging = el;
+        setTimeout(function() { el.classList.add('dragging'); }, 0);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', el.dataset.uid);
+      });
+      el.addEventListener('dragend', function() {
+        el.classList.remove('dragging');
+        dragging = null;
+      });
+    });
+
+    nodes.forEach(function(el) {
+      el.addEventListener('dragover', function(e) {
+        if (!dragging || dragging === el) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.classList.add('drag-over');
+      });
+      el.addEventListener('dragleave', function(e) {
+        if (!el.contains(e.relatedTarget)) { el.classList.remove('drag-over'); }
+      });
+      el.addEventListener('drop', function(e) {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        if (!dragging || dragging === el) return;
+        var reparentUrl = dragging.dataset.reparentUrl;
+        var newParentUid = el.dataset.uid;
+        if (!reparentUrl || !newParentUid) return;
+        var savedOpacity = dragging.style.opacity;
+        dragging.style.opacity = '0.3';
+        fetch(reparentUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+          body: 'new_parent_uid=' + encodeURIComponent(newParentUid),
+          redirect: 'follow'
+        })
+        .then(function() { window.location.reload(); })
+        .catch(function() {
+          dragging.style.opacity = savedOpacity;
+          showToast('Network error — could not move chapter.', 'error');
+        });
+      });
+    });
+  })();
+
+  /* ── Like count stats sync ─────────────────────── */
+  document.addEventListener('htmx:afterSettle', function() {
+    var countEl = document.querySelector('#like-button button span:nth-child(2)');
+    var statEl  = document.getElementById('stat-likes');
+    if (countEl && statEl) statEl.textContent = countEl.textContent.trim();
+  });
 </script>
 {% endblock %}

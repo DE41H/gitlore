@@ -31,7 +31,7 @@
           <div id="status-poll"
                hx-get="{% url 'series:chapter-status' chapter.series.uid chapter.uid %}"
                hx-trigger="every 3s"
-               hx-swap="outerHTML">
+               hx-swap="innerHTML">
             {% include "series/partials/chapter_status.html" with chapter=chapter %}
           </div>
           {% else %}
@@ -135,7 +135,7 @@
 {% if chapter.status == 'pending' or chapter.status == 'generating' %}
 <script>
   // Auto-reload page when chapterComplete event fires (from HX-Trigger header in chapter_status_view)
-  document.body.addEventListener('chapterComplete', function() {
+  document.addEventListener('chapterComplete', function() {
     window.location.reload();
   });
 </script>
