@@ -2,7 +2,7 @@ from os import getenv
 
 from google import genai
 
-EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_DIMENSIONS = 768
 
 client = genai.Client(api_key=getenv("GOOGLE_API_KEY", default="GOOGLE_API_KEY"))
 embedding_model = "models/gemini-embedding-001"

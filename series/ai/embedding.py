@@ -1,7 +1,7 @@
 from django.db.transaction import atomic
 from google.genai import types
 
-from series.ai.gemini import client, embedding_model
+from series.ai.gemini import EMBEDDING_DIMENSIONS, client, embedding_model
 from series.models import (
     Character,
     CharacterChunk,
@@ -21,7 +21,9 @@ def get_embeddings(text_list: list[str], task_type: str = "retrieval_document") 
         response = client.models.embed_content(
             model=embedding_model,
             contents=batch,
-            config=types.EmbedContentConfig(task_type=task_type),
+            config=types.EmbedContentConfig(
+                task_type=task_type, output_dimensionality=EMBEDDING_DIMENSIONS
+            ),
         )
         if not response.embeddings:
             raise ValueError(
