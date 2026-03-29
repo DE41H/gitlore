@@ -60,7 +60,7 @@ When Claude generates a new chapter, it doesn't read the entire story. Instead, 
 | **Spin-offs** | Fork any series at any chapter — world, characters, and canon lineage are copied atomically; branching point recorded precisely |
 | **Generation Tracking** | Each chapter has a `status` (pending → generating → done/failed); canon requires `done` |
 | **Likes & Views** | Atomic like/unlike and view tracking with denormalized counters; concurrency-safe |
-| **GitHub-dark UI** | Markdown-rendered stories, branch visualization, GitHub-inspired aesthetic |
+| **Gold/Black UI** | Interactive chapter-tree graph, drag-and-drop reparenting, instant HTMX updates, mobile-responsive |
 | **Credit System** | Free daily prompt token quota; paid tiers for unlimited access via Stripe |
 | **Export** | Publish to Wattpad or Webtoon (Phase 4, planned) |
 
@@ -105,7 +105,7 @@ Chapter (tree, self-FK via parent)
 | **Database** | PostgreSQL + pgvector — story graph, semantic search (HNSW indexes) |
 | **Task Queue** | Celery + Redis; 300s task time limit |
 | **Infrastructure** | Docker + Nginx |
-| **Frontend** | Django Templates (SSR) + HTMX + Tailwind CSS |
+| **Frontend** | Django Templates (SSR) + HTMX 2.0 + custom CSS (Gold/Black theme) |
 | **Payments** | Stripe — subscription tiers |
 
 ---
